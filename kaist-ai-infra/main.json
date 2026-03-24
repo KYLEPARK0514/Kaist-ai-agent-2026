@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "1137423739126007520"
+      "templateHash": "5099742483991650015"
     }
   },
   "parameters": {
@@ -383,9 +383,6 @@
           "appInsightsConnectionString": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.appInsightsConnectionString.value]"
           },
-          "pdfStorageConnectionString": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.connectionString.value]"
-          },
           "cosmosEndpoint": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmos'), '2025-04-01').outputs.cosmosEndpoint.value]"
           },
@@ -403,7 +400,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "3649458253859700211"
+              "templateHash": "8103295023263439312"
             }
           },
           "parameters": {
@@ -414,9 +411,6 @@
               "type": "string"
             },
             "appInsightsConnectionString": {
-              "type": "string"
-            },
-            "pdfStorageConnectionString": {
               "type": "string"
             },
             "cosmosEndpoint": {
@@ -495,7 +489,11 @@
                     },
                     {
                       "name": "AZURE_STORAGE_CONNECTION_STRING",
-                      "value": "[parameters('pdfStorageConnectionString')]"
+                      "value": "[format('@Microsoft.KeyVault(VaultName=kaist-kv-{0};SecretName=pdf-storage-connection-string)', parameters('uniqueSuffix'))]"
+                    },
+                    {
+                      "name": "AZURE_COSMOS_KEY",
+                      "value": "[format('@Microsoft.KeyVault(VaultName=kaist-kv-{0};SecretName=cosmos-primary-key)', parameters('uniqueSuffix'))]"
                     },
                     {
                       "name": "AZURE_COSMOS_ENDPOINT",
@@ -536,8 +534,7 @@
       },
       "dependsOn": [
         "[resourceId('Microsoft.Resources/deployments', 'cosmos')]",
-        "[resourceId('Microsoft.Resources/deployments', 'monitoring')]",
-        "[resourceId('Microsoft.Resources/deployments', 'storage')]"
+        "[resourceId('Microsoft.Resources/deployments', 'monitoring')]"
       ]
     },
     {
