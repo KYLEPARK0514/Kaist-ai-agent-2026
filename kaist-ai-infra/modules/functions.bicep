@@ -68,7 +68,11 @@ resource functionApp 'Microsoft.Web/sites@2022-03-01' = {
         }
         {
           name: 'AZURE_STORAGE_CONNECTION_STRING'
-          value: pdfStorageConnectionString
+          value: '@Microsoft.KeyVault(VaultName=kaist-kv-${uniqueSuffix};SecretName=pdf-storage-connection-string)'
+        }
+        {
+          name: 'AZURE_COSMOS_KEY'
+          value: '@Microsoft.KeyVault(VaultName=kaist-kv-${uniqueSuffix};SecretName=cosmos-primary-key)'
         }
         {
           name: 'AZURE_COSMOS_ENDPOINT'
