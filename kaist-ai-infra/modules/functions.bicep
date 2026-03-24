@@ -1,7 +1,6 @@
 param location string
 param uniqueSuffix string
 param appInsightsConnectionString string
-param pdfStorageConnectionString string
 param cosmosEndpoint string
 param cosmosDatabaseName string
 param cosmosContainerName string
