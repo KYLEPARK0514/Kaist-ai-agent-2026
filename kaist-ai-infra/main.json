@@ -1,0 +1,758 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.41.2.15936",
+      "templateHash": "4283709797647510284"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "koreacentral"
+    }
+  },
+  "variables": {
+    "uniqueSuffix": "[uniqueString(resourceGroup().id)]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "monitoring",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "uniqueSuffix": {
+            "value": "[variables('uniqueSuffix')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "5833633454574837631"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "uniqueSuffix": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.OperationalInsights/workspaces",
+              "apiVersion": "2022-10-01",
+              "name": "[format('kaist-law-{0}', parameters('uniqueSuffix'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "sku": {
+                  "name": "PerGB2018"
+                },
+                "retentionInDays": 30
+              }
+            },
+            {
+              "type": "Microsoft.Insights/components",
+              "apiVersion": "2020-02-02",
+              "name": "[format('kaist-appi-{0}', parameters('uniqueSuffix'))]",
+              "location": "[parameters('location')]",
+              "kind": "web",
+              "properties": {
+                "Application_Type": "web",
+                "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', format('kaist-law-{0}', parameters('uniqueSuffix')))]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.OperationalInsights/workspaces', format('kaist-law-{0}', parameters('uniqueSuffix')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "appInsightsConnectionString": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/components', format('kaist-appi-{0}', parameters('uniqueSuffix'))), '2020-02-02').ConnectionString]"
+            },
+            "appInsightsInstrumentationKey": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/components', format('kaist-appi-{0}', parameters('uniqueSuffix'))), '2020-02-02').InstrumentationKey]"
+            },
+            "logAnalyticsWorkspaceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.OperationalInsights/workspaces', format('kaist-law-{0}', parameters('uniqueSuffix')))]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "storage",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "uniqueSuffix": {
+            "value": "[variables('uniqueSuffix')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "251128607212704022"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "uniqueSuffix": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-01-01",
+              "name": "[format('kaistaipdf{0}', parameters('uniqueSuffix'))]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "kind": "StorageV2",
+              "properties": {
+                "allowBlobPublicAccess": false,
+                "minimumTlsVersion": "TLS1_2",
+                "supportsHttpsTrafficOnly": true
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}', format('kaistaipdf{0}', parameters('uniqueSuffix')), 'default')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', format('kaistaipdf{0}', parameters('uniqueSuffix')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}/{2}', format('kaistaipdf{0}', parameters('uniqueSuffix')), 'default', 'pdfs')]",
+              "properties": {
+                "publicAccess": "None"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', format('kaistaipdf{0}', parameters('uniqueSuffix')), 'default')]"
+              ]
+            }
+          ],
+          "outputs": {
+            "storageAccountName": {
+              "type": "string",
+              "value": "[format('kaistaipdf{0}', parameters('uniqueSuffix'))]"
+            },
+            "storageAccountId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Storage/storageAccounts', format('kaistaipdf{0}', parameters('uniqueSuffix')))]"
+            },
+            "containerName": {
+              "type": "string",
+              "value": "pdfs"
+            },
+            "connectionString": {
+              "type": "string",
+              "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', format('kaistaipdf{0}', parameters('uniqueSuffix')), listKeys(resourceId('Microsoft.Storage/storageAccounts', format('kaistaipdf{0}', parameters('uniqueSuffix'))), '2023-01-01').keys[0].value, environment().suffixes.storage)]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "cosmos",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "uniqueSuffix": {
+            "value": "[variables('uniqueSuffix')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "10929702000579542823"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "uniqueSuffix": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts",
+              "apiVersion": "2024-11-15",
+              "name": "[format('kaistcosmos{0}', parameters('uniqueSuffix'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "databaseAccountOfferType": "Standard",
+                "capabilities": [
+                  {
+                    "name": "EnableServerless"
+                  },
+                  {
+                    "name": "EnableNoSQLVectorSearch"
+                  },
+                  {
+                    "name": "EnableNoSQLFullTextSearch"
+                  }
+                ],
+                "consistencyPolicy": {
+                  "defaultConsistencyLevel": "Session"
+                },
+                "locations": [
+                  {
+                    "locationName": "[parameters('location')]",
+                    "failoverPriority": 0
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
+              "apiVersion": "2024-11-15",
+              "name": "[format('{0}/{1}', format('kaistcosmos{0}', parameters('uniqueSuffix')), 'kaistdb')]",
+              "properties": {
+                "resource": {
+                  "id": "kaistdb"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts', format('kaistcosmos{0}', parameters('uniqueSuffix')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+              "apiVersion": "2024-11-15",
+              "name": "[format('{0}/{1}/{2}', format('kaistcosmos{0}', parameters('uniqueSuffix')), 'kaistdb', 'knowledge')]",
+              "properties": {
+                "resource": {
+                  "id": "knowledge",
+                  "partitionKey": {
+                    "paths": [
+                      "/documentId"
+                    ],
+                    "kind": "Hash"
+                  },
+                  "indexingPolicy": {
+                    "indexingMode": "consistent",
+                    "includedPaths": [
+                      {
+                        "path": "/*"
+                      }
+                    ],
+                    "excludedPaths": [
+                      {
+                        "path": "/\"_etag\"/?"
+                      },
+                      {
+                        "path": "/embedding/*"
+                      }
+                    ],
+                    "vectorIndexes": [
+                      {
+                        "path": "/embedding",
+                        "type": "flat"
+                      }
+                    ],
+                    "fullTextIndexes": [
+                      {
+                        "path": "/content"
+                      }
+                    ]
+                  },
+                  "vectorEmbeddingPolicy": {
+                    "vectorEmbeddings": [
+                      {
+                        "path": "/embedding",
+                        "dataType": "float32",
+                        "dimensions": 1536,
+                        "distanceFunction": "cosine"
+                      }
+                    ]
+                  },
+                  "fullTextPolicy": {
+                    "defaultLanguage": "en-us",
+                    "fullTextPaths": [
+                      {
+                        "path": "/content",
+                        "language": "en-us"
+                      }
+                    ]
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', format('kaistcosmos{0}', parameters('uniqueSuffix')), 'kaistdb')]"
+              ]
+            }
+          ],
+          "outputs": {
+            "cosmosAccountName": {
+              "type": "string",
+              "value": "[format('kaistcosmos{0}', parameters('uniqueSuffix'))]"
+            },
+            "cosmosEndpoint": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.DocumentDB/databaseAccounts', format('kaistcosmos{0}', parameters('uniqueSuffix'))), '2024-11-15').documentEndpoint]"
+            },
+            "cosmosDatabaseName": {
+              "type": "string",
+              "value": "kaistdb"
+            },
+            "cosmosContainerName": {
+              "type": "string",
+              "value": "knowledge"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "functions",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "uniqueSuffix": {
+            "value": "[variables('uniqueSuffix')]"
+          },
+          "appInsightsConnectionString": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.appInsightsConnectionString.value]"
+          },
+          "pdfStorageConnectionString": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.connectionString.value]"
+          },
+          "cosmosEndpoint": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmos'), '2025-04-01').outputs.cosmosEndpoint.value]"
+          },
+          "cosmosDatabaseName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmos'), '2025-04-01').outputs.cosmosDatabaseName.value]"
+          },
+          "cosmosContainerName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmos'), '2025-04-01').outputs.cosmosContainerName.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "8098305370759921181"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "uniqueSuffix": {
+              "type": "string"
+            },
+            "appInsightsConnectionString": {
+              "type": "string"
+            },
+            "pdfStorageConnectionString": {
+              "type": "string"
+            },
+            "cosmosEndpoint": {
+              "type": "string"
+            },
+            "cosmosDatabaseName": {
+              "type": "string"
+            },
+            "cosmosContainerName": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-01-01",
+              "name": "[format('kaistfunc{0}', parameters('uniqueSuffix'))]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "kind": "StorageV2",
+              "properties": {
+                "allowBlobPublicAccess": false,
+                "minimumTlsVersion": "TLS1_2",
+                "supportsHttpsTrafficOnly": true
+              }
+            },
+            {
+              "type": "Microsoft.Web/serverfarms",
+              "apiVersion": "2022-03-01",
+              "name": "[format('kaist-asp-{0}', parameters('uniqueSuffix'))]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Y1",
+                "tier": "Dynamic"
+              },
+              "kind": "linux",
+              "properties": {
+                "reserved": true
+              }
+            },
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2022-03-01",
+              "name": "[format('kaist-func-{0}', parameters('uniqueSuffix'))]",
+              "location": "[parameters('location')]",
+              "kind": "functionapp,linux",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('kaist-asp-{0}', parameters('uniqueSuffix')))]",
+                "httpsOnly": true,
+                "siteConfig": {
+                  "linuxFxVersion": "Python|3.11",
+                  "appSettings": [
+                    {
+                      "name": "AzureWebJobsStorage",
+                      "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', format('kaistfunc{0}', parameters('uniqueSuffix')), listKeys(resourceId('Microsoft.Storage/storageAccounts', format('kaistfunc{0}', parameters('uniqueSuffix'))), '2023-01-01').keys[0].value, environment().suffixes.storage)]"
+                    },
+                    {
+                      "name": "FUNCTIONS_EXTENSION_VERSION",
+                      "value": "~4"
+                    },
+                    {
+                      "name": "FUNCTIONS_WORKER_RUNTIME",
+                      "value": "python"
+                    },
+                    {
+                      "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                      "value": "[parameters('appInsightsConnectionString')]"
+                    },
+                    {
+                      "name": "AZURE_STORAGE_CONNECTION_STRING",
+                      "value": "[parameters('pdfStorageConnectionString')]"
+                    },
+                    {
+                      "name": "AZURE_COSMOS_ENDPOINT",
+                      "value": "[parameters('cosmosEndpoint')]"
+                    },
+                    {
+                      "name": "AZURE_COSMOS_DATABASE_NAME",
+                      "value": "[parameters('cosmosDatabaseName')]"
+                    },
+                    {
+                      "name": "AZURE_COSMOS_CONTAINER_NAME",
+                      "value": "[parameters('cosmosContainerName')]"
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', format('kaist-asp-{0}', parameters('uniqueSuffix')))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', format('kaistfunc{0}', parameters('uniqueSuffix')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "functionAppName": {
+              "type": "string",
+              "value": "[format('kaist-func-{0}', parameters('uniqueSuffix'))]"
+            },
+            "functionAppHostname": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', format('kaist-func-{0}', parameters('uniqueSuffix'))), '2022-03-01').defaultHostName]"
+            },
+            "functionAppPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', format('kaist-func-{0}', parameters('uniqueSuffix'))), '2022-03-01', 'full').identity.principalId]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'cosmos')]",
+        "[resourceId('Microsoft.Resources/deployments', 'monitoring')]",
+        "[resourceId('Microsoft.Resources/deployments', 'storage')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "staticwebapp",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "uniqueSuffix": {
+            "value": "[variables('uniqueSuffix')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "2125265311501744377"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "defaultValue": "eastasia"
+            },
+            "uniqueSuffix": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Web/staticSites",
+              "apiVersion": "2022-03-01",
+              "name": "[format('kaist-swa-{0}', parameters('uniqueSuffix'))]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Free",
+                "tier": "Free"
+              },
+              "properties": {}
+            }
+          ],
+          "outputs": {
+            "staticWebAppName": {
+              "type": "string",
+              "value": "[format('kaist-swa-{0}', parameters('uniqueSuffix'))]"
+            },
+            "staticWebAppUrl": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/staticSites', format('kaist-swa-{0}', parameters('uniqueSuffix'))), '2022-03-01').defaultHostname]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "keyvault",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "uniqueSuffix": {
+            "value": "[variables('uniqueSuffix')]"
+          },
+          "functionAppPrincipalId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'functions'), '2025-04-01').outputs.functionAppPrincipalId.value]"
+          },
+          "cosmosAccountName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmos'), '2025-04-01').outputs.cosmosAccountName.value]"
+          },
+          "pdfStorageAccountName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.storageAccountName.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "6671669461450705309"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "uniqueSuffix": {
+              "type": "string"
+            },
+            "functionAppPrincipalId": {
+              "type": "string"
+            },
+            "cosmosAccountName": {
+              "type": "string"
+            },
+            "pdfStorageAccountName": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.KeyVault/vaults",
+              "apiVersion": "2023-02-01",
+              "name": "[format('kaist-kv-{0}', parameters('uniqueSuffix'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "sku": {
+                  "family": "A",
+                  "name": "standard"
+                },
+                "tenantId": "[subscription().tenantId]",
+                "enableRbacAuthorization": true,
+                "enableSoftDelete": true,
+                "softDeleteRetentionInDays": 7
+              }
+            },
+            {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2023-02-01",
+              "name": "[format('{0}/{1}', format('kaist-kv-{0}', parameters('uniqueSuffix')), 'cosmos-primary-key')]",
+              "properties": {
+                "value": "[listKeys(resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), '2024-11-15').primaryMasterKey]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', format('kaist-kv-{0}', parameters('uniqueSuffix')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2023-02-01",
+              "name": "[format('{0}/{1}', format('kaist-kv-{0}', parameters('uniqueSuffix')), 'pdf-storage-connection-string')]",
+              "properties": {
+                "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('pdfStorageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('pdfStorageAccountName')), '2023-01-01').keys[0].value, environment().suffixes.storage)]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', format('kaist-kv-{0}', parameters('uniqueSuffix')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', format('kaist-kv-{0}', parameters('uniqueSuffix')))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', format('kaist-kv-{0}', parameters('uniqueSuffix'))), parameters('functionAppPrincipalId'), '4633458b-17de-408a-b874-0445c86b69e0')]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e0')]",
+                "principalId": "[parameters('functionAppPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', format('kaist-kv-{0}', parameters('uniqueSuffix')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "keyVaultName": {
+              "type": "string",
+              "value": "[format('kaist-kv-{0}', parameters('uniqueSuffix'))]"
+            },
+            "keyVaultUri": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.KeyVault/vaults', format('kaist-kv-{0}', parameters('uniqueSuffix'))), '2023-02-01').vaultUri]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'cosmos')]",
+        "[resourceId('Microsoft.Resources/deployments', 'functions')]",
+        "[resourceId('Microsoft.Resources/deployments', 'storage')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "AZURE_STORAGE_ACCOUNT_NAME": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.storageAccountName.value]"
+    },
+    "AZURE_STORAGE_CONTAINER_NAME": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.containerName.value]"
+    },
+    "AZURE_COSMOS_ENDPOINT": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmos'), '2025-04-01').outputs.cosmosEndpoint.value]"
+    },
+    "AZURE_COSMOS_DATABASE_NAME": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmos'), '2025-04-01').outputs.cosmosDatabaseName.value]"
+    },
+    "AZURE_COSMOS_CONTAINER_NAME": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'cosmos'), '2025-04-01').outputs.cosmosContainerName.value]"
+    },
+    "AZURE_FUNCTIONS_APP_NAME": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'functions'), '2025-04-01').outputs.functionAppName.value]"
+    },
+    "AZURE_STATIC_WEB_APP_URL": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'staticwebapp'), '2025-04-01').outputs.staticWebAppUrl.value]"
+    },
+    "APPLICATIONINSIGHTS_CONNECTION_STRING": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.appInsightsConnectionString.value]"
+    },
+    "AZURE_KEY_VAULT_NAME": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'keyvault'), '2025-04-01').outputs.keyVaultName.value]"
+    },
+    "AZURE_KEY_VAULT_URI": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'keyvault'), '2025-04-01').outputs.keyVaultUri.value]"
+    }
+  }
+}

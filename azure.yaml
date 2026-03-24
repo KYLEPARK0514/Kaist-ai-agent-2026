@@ -1,9 +1,15 @@
 name: kaist-ai-agent
 metadata:
   template: kaist-ai-agent@0.0.1
+infra:
+  provider: bicep
+  path: kaist-ai-infra
 services:
-  infra:
-    project: kaist-ai-infra
-    module: main.bicep
-    path: .
-    language: bicep
+  api:
+    project: kaist-ai-functions
+    language: python
+    host: function
+  web:
+    project: kaist-ai-webapp
+    language: js
+    host: staticwebapp
