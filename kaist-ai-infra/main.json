@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "4283709797647510284"
+      "templateHash": "14688675016457350139"
     }
   },
   "parameters": {
@@ -394,7 +394,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "8098305370759921181"
+              "templateHash": "3649458253859700211"
             }
           },
           "parameters": {
@@ -458,6 +458,9 @@
               "kind": "functionapp,linux",
               "identity": {
                 "type": "SystemAssigned"
+              },
+              "tags": {
+                "azd-service-name": "api"
               },
               "properties": {
                 "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('kaist-asp-{0}', parameters('uniqueSuffix')))]",
@@ -549,7 +552,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "2125265311501744377"
+              "templateHash": "10797344692891124406"
             }
           },
           "parameters": {
@@ -570,6 +573,9 @@
               "sku": {
                 "name": "Free",
                 "tier": "Free"
+              },
+              "tags": {
+                "azd-service-name": "web"
               },
               "properties": {}
             }
