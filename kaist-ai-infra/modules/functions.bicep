@@ -41,6 +41,9 @@ resource functionApp 'Microsoft.Web/sites@2022-03-01' = {
   identity: {
     type: 'SystemAssigned'
   }
+  tags: {
+    'azd-service-name': 'api'
+  }
   properties: {
     serverFarmId: functionAppServicePlan.id
     httpsOnly: true

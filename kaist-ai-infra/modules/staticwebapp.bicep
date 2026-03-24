@@ -10,6 +10,9 @@ resource staticWebApp 'Microsoft.Web/staticSites@2022-03-01' = {
     name: 'Free'
     tier: 'Free'
   }
+  tags: {
+    'azd-service-name': 'web'
+  }
   properties: {}
 }
 
