@@ -1,11 +1,18 @@
 param location string
 param uniqueSuffix string
 
+var databaseName = 'kaistdb'
+var containerName = 'knowledge'
+
 resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
   name: 'kaistcosmos${uniqueSuffix}'
   location: location
+  kind: 'GlobalDocumentDB'
   properties: {
     databaseAccountOfferType: 'Standard'
+    // EnableServerless: serverless capacity mode (no provisioned throughput)
+    // EnableNoSQLVectorSearch: required for vectorEmbeddingPolicy and vector indexes
+    // EnableNoSQLFullTextSearch: required for fullTextPolicy and fullTextIndexes (preview)
     capabilities: [
       { name: 'EnableServerless' }
       { name: 'EnableNoSQLVectorSearch' }
@@ -18,48 +25,59 @@ resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
       {
         locationName: location
         failoverPriority: 0
+        isZoneRedundant: false
       }
     ]
+    // Disable public network access metadata write — best practice
+    disableLocalAuth: false
   }
 }
 
 resource cosmosDatabase 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-11-15' = {
   parent: cosmosDbAccount
-  name: 'kaistdb'
+  name: databaseName
   properties: {
     resource: {
-      id: 'kaistdb'
+      id: databaseName
     }
   }
 }
 
-// Container with vector search policy and full-text index for hybrid search
+// Container for knowledge base chunks with hybrid search (vector + full-text)
+// IMPORTANT: vectorEmbeddingPolicy and vectorIndexes are immutable after creation.
 resource cosmosContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = {
   parent: cosmosDatabase
-  name: 'knowledge'
+  name: containerName
   properties: {
     resource: {
-      id: 'knowledge'
+      id: containerName
+      // Partition by documentId so all chunks of a document are co-located
       partitionKey: {
         paths: [ '/documentId' ]
         kind: 'Hash'
+        version: 2
       }
       indexingPolicy: {
         indexingMode: 'consistent'
+        automatic: true
         includedPaths: [
           { path: '/*' }
         ]
         excludedPaths: [
+          // Exclude _etag from indexing
           { path: '/"_etag"/?' }
+          // Exclude the raw embedding array — it is indexed only via vectorIndexes below
           { path: '/embedding/*' }
         ]
+        // DiskANN supports up to 4096 dimensions; required for 1536-dim embeddings
+        // (flat index type is limited to 505 dimensions)
         vectorIndexes: [
           {
             path: '/embedding'
-            type: 'flat'
+            type: 'diskANN'
           }
         ]
-        // fullTextIndexes not yet in Bicep type library (preview property) — suppress BCP037
+        // fullTextIndexes is a preview property — BCP037 suppressed
         #disable-next-line BCP037
         fullTextIndexes: [
           {
@@ -67,6 +85,7 @@ resource cosmosContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/con
           }
         ]
       }
+      // Vector embedding policy: 1536-dim float32 cosine (OpenAI ada-002 / text-embedding-3-small)
       vectorEmbeddingPolicy: {
         vectorEmbeddings: [
           {
@@ -77,14 +96,14 @@ resource cosmosContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/con
           }
         ]
       }
-      // fullTextPolicy not yet in Bicep type library (preview property) — suppress BCP037
+      // fullTextPolicy is a preview property — BCP037 suppressed
       #disable-next-line BCP037
       fullTextPolicy: {
-        defaultLanguage: 'en-us'
+        defaultLanguage: 'en-US'
         fullTextPaths: [
           {
             path: '/content'
-            language: 'en-us'
+            language: 'en-US'
           }
         ]
       }

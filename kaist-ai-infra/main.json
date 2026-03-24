@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "4283709797647510284"
+      "templateHash": "1137423739126007520"
     }
   },
   "parameters": {
@@ -214,7 +214,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "10929702000579542823"
+              "templateHash": "10160283571122309644"
             }
           },
           "parameters": {
@@ -225,12 +225,17 @@
               "type": "string"
             }
           },
+          "variables": {
+            "databaseName": "kaistdb",
+            "containerName": "knowledge"
+          },
           "resources": [
             {
               "type": "Microsoft.DocumentDB/databaseAccounts",
               "apiVersion": "2024-11-15",
               "name": "[format('kaistcosmos{0}', parameters('uniqueSuffix'))]",
               "location": "[parameters('location')]",
+              "kind": "GlobalDocumentDB",
               "properties": {
                 "databaseAccountOfferType": "Standard",
                 "capabilities": [
@@ -250,18 +255,20 @@
                 "locations": [
                   {
                     "locationName": "[parameters('location')]",
-                    "failoverPriority": 0
+                    "failoverPriority": 0,
+                    "isZoneRedundant": false
                   }
-                ]
+                ],
+                "disableLocalAuth": false
               }
             },
             {
               "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
               "apiVersion": "2024-11-15",
-              "name": "[format('{0}/{1}', format('kaistcosmos{0}', parameters('uniqueSuffix')), 'kaistdb')]",
+              "name": "[format('{0}/{1}', format('kaistcosmos{0}', parameters('uniqueSuffix')), variables('databaseName'))]",
               "properties": {
                 "resource": {
-                  "id": "kaistdb"
+                  "id": "[variables('databaseName')]"
                 }
               },
               "dependsOn": [
@@ -271,18 +278,20 @@
             {
               "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
               "apiVersion": "2024-11-15",
-              "name": "[format('{0}/{1}/{2}', format('kaistcosmos{0}', parameters('uniqueSuffix')), 'kaistdb', 'knowledge')]",
+              "name": "[format('{0}/{1}/{2}', format('kaistcosmos{0}', parameters('uniqueSuffix')), variables('databaseName'), variables('containerName'))]",
               "properties": {
                 "resource": {
-                  "id": "knowledge",
+                  "id": "[variables('containerName')]",
                   "partitionKey": {
                     "paths": [
                       "/documentId"
                     ],
-                    "kind": "Hash"
+                    "kind": "Hash",
+                    "version": 2
                   },
                   "indexingPolicy": {
                     "indexingMode": "consistent",
+                    "automatic": true,
                     "includedPaths": [
                       {
                         "path": "/*"
@@ -299,7 +308,7 @@
                     "vectorIndexes": [
                       {
                         "path": "/embedding",
-                        "type": "flat"
+                        "type": "diskANN"
                       }
                     ],
                     "fullTextIndexes": [
@@ -319,18 +328,18 @@
                     ]
                   },
                   "fullTextPolicy": {
-                    "defaultLanguage": "en-us",
+                    "defaultLanguage": "en-US",
                     "fullTextPaths": [
                       {
                         "path": "/content",
-                        "language": "en-us"
+                        "language": "en-US"
                       }
                     ]
                   }
                 }
               },
               "dependsOn": [
-                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', format('kaistcosmos{0}', parameters('uniqueSuffix')), 'kaistdb')]"
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', format('kaistcosmos{0}', parameters('uniqueSuffix')), variables('databaseName'))]"
               ]
             }
           ],
@@ -345,11 +354,11 @@
             },
             "cosmosDatabaseName": {
               "type": "string",
-              "value": "kaistdb"
+              "value": "[variables('databaseName')]"
             },
             "cosmosContainerName": {
               "type": "string",
-              "value": "knowledge"
+              "value": "[variables('containerName')]"
             }
           }
         }
@@ -394,7 +403,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "8098305370759921181"
+              "templateHash": "3649458253859700211"
             }
           },
           "parameters": {
@@ -458,6 +467,9 @@
               "kind": "functionapp,linux",
               "identity": {
                 "type": "SystemAssigned"
+              },
+              "tags": {
+                "azd-service-name": "api"
               },
               "properties": {
                 "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('kaist-asp-{0}', parameters('uniqueSuffix')))]",
@@ -549,7 +561,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "2125265311501744377"
+              "templateHash": "10797344692891124406"
             }
           },
           "parameters": {
@@ -570,6 +582,9 @@
               "sku": {
                 "name": "Free",
                 "tier": "Free"
+              },
+              "tags": {
+                "azd-service-name": "web"
               },
               "properties": {}
             }
