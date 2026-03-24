@@ -1,0 +1,6 @@
+azure-functions
+# Added for future implementations
+azure-cosmos
+azure-storage-blob
+pypdf2
+openai
