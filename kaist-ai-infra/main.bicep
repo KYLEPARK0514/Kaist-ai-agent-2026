@@ -77,6 +77,15 @@ resource functionAppServicePlan 'Microsoft.Web/serverfarms@2022-03-01' = {
   properties: {}
 }
 
+// Monitoring: Log Analytics Workspace + Application Insights
+module monitoring 'modules/monitoring.bicep' = {
+  name: 'monitoring'
+  params: {
+    location: location
+    uniqueSuffix: uniqueString(resourceGroup().id)
+  }
+}
+
 // Outputs for azd compatibility
 output pdfStorageAccountName string = pdfStorageAccount.name
 output pdfStorageAccountKey string = pdfStorageAccount.listKeys().keys[0].value
@@ -87,3 +96,5 @@ output cosmosDbAccountKey string = cosmosDbAccount.listKeys().keys[0].value
 output functionStorageAccountName string = functionStorageAccount.name
 output functionStorageAccountKey string = functionStorageAccount.listKeys().keys[0].value
 output functionAppServicePlanName string = functionAppServicePlan.name
+output APPLICATIONINSIGHTS_CONNECTION_STRING string = monitoring.outputs.appInsightsConnectionString
+output logAnalyticsWorkspaceId string = monitoring.outputs.logAnalyticsWorkspaceId
