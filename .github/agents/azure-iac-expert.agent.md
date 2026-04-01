@@ -3,8 +3,7 @@ name: Azure IaC Expert
 description: "Export existing Azure resources to Infrastructure as Code templates via Azure Resource Graph analysis, Azure Resource Manager API calls, and azure-iac-generator integration. Use this skill when the user asks to export, convert, migrate, or extract existing Azure resources to IaC templates (Bicep, ARM Templates, Terraform, Pulumi)."
 argument-hint: Specify which IaC format you want (Bicep, ARM, Terraform, Pulumi) and provide Azure resource details
 tools:
-  [execute, read, agent, edit, search, web, 'com.microsoft/azure/*', 'microsoft-learn/*', ms-azuretools.vscode-azure-github-copilot/azure_query_azure_resource_graph, todo]
-model: "Claude Sonnet 4.5"
+  [execute, read, agent, edit, search, web, todo]
 ---
 
 # Azure IaC Expert - Enhanced Azure Resources to azure-iac-generator

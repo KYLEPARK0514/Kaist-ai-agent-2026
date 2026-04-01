@@ -14,21 +14,24 @@ export function ChatInterface() {
     setInput("");
 
     startTransition(async () => {
-      // Placeholder for API call
-      console.log("Sending message to backend...");
-      // const res = await fetch("/api/chat", {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify({ message: input }),
-      // });
-      // const data = await res.json();
-      
-      // Simulating a network delay and response
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      setMessages((prev) => [
-        ...prev,
-        { role: "bot", content: "This is a placeholder response. Your backend integration will go here." },
-      ]);
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: input }),
+        });
+        if (!res.ok) throw new Error(`Server error: ${res.status}`);
+        const data = await res.json();
+        setMessages((prev) => [
+          ...prev,
+          { role: "bot", content: data.answer },
+        ]);
+      } catch (err) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "bot", content: `Error: ${err instanceof Error ? err.message : "Unknown error"}` },
+        ]);
+      }
     });
   };
 

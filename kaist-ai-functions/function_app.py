@@ -32,7 +32,7 @@ def chat(req: func.HttpRequest) -> func.HttpResponse:
         if not api_key:
             return func.HttpResponse("Missing GOOGLE_API_KEY", status_code=500)
 
-        llm = ChatGoogleGenerativeAI(model="gemini-3-pro", google_api_key=api_key)
+        llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", google_api_key=api_key)
         response = llm.invoke(question)
 
         return func.HttpResponse(
