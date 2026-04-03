@@ -13,6 +13,16 @@ export function ChatInterface() {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
 
+<<<<<<< HEAD
+    startTransition(() => {
+      void (async () => {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        setMessages((prev) => [
+          ...prev,
+          { role: "bot", content: "This is a placeholder response. Your backend integration will go here." },
+        ]);
+      })();
+=======
     startTransition(async () => {
       try {
         const res = await fetch("/api/chat", {
@@ -32,15 +42,22 @@ export function ChatInterface() {
           { role: "bot", content: `Error: ${err instanceof Error ? err.message : "Unknown error"}` },
         ]);
       }
+>>>>>>> origin/main
     });
   };
 
   return (
     <div className="flex flex-col h-[500px] max-h-full bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden text-gray-800">
       <div className="bg-indigo-600 text-white p-4 font-semibold">
+<<<<<<< HEAD
+        Q&amp;A Chat
+      </div>
+
+=======
         2. Q&A Chat
       </div>
       
+>>>>>>> origin/main
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center text-gray-400 text-sm italic">

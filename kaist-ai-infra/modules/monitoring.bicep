@@ -1,10 +1,13 @@
-param location string
-param uniqueSuffix string
+// Monitoring module: Log Analytics Workspace + Application Insights
 
-// Log Analytics Workspace (prerequisite for Application Insights)
-resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
-  name: 'kaist-law-${uniqueSuffix}'
+param location string
+param resourceToken string
+param tags object = {}
+
+resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+  name: 'kaist-log-${resourceToken}'
   location: location
+  tags: tags
   properties: {
     sku: {
       name: 'PerGB2018'
@@ -13,17 +16,16 @@ resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10
   }
 }
 
-// Application Insights (linked to Log Analytics Workspace)
 resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
-  name: 'kaist-appi-${uniqueSuffix}'
+  name: 'kaist-appi-${resourceToken}'
   location: location
+  tags: tags
   kind: 'web'
   properties: {
     Application_Type: 'web'
-    WorkspaceResourceId: logAnalyticsWorkspace.id
+    WorkspaceResourceId: logAnalytics.id
   }
 }
 
-output appInsightsConnectionString string = appInsights.properties.ConnectionString
-output appInsightsInstrumentationKey string = appInsights.properties.InstrumentationKey
-output logAnalyticsWorkspaceId string = logAnalyticsWorkspace.id
+output connectionString string = appInsights.properties.ConnectionString
+output instrumentationKey string = appInsights.properties.InstrumentationKey

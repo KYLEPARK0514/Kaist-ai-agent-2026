@@ -2,14 +2,16 @@
 
 ## Overview
 
-This document outlines the phased implementation plan for the KAIST AI Agent project.  
-**Phase 1 (current focus): Infrastructure** — all Azure resources provisioned via Bicep and deployed with `azd`.  
-Phase 2 and 3 (deferred) cover the API Functions and Web App respectively.
+This document outlines the phased implementation plan for the KAIST AI Agent project.
+
+- **Phase 1 (complete)** — Azure infrastructure provisioned via Bicep and deployed with `azd`.
+- **Phase 2 (in progress)** — API Functions: PDF management CRUD, text extraction, embedding, and chat.
+- **Phase 3 (deferred)** — Web App: React UI for document management and chat.
 
 ---
 
 ## Directory Structure
-z
+
 ```
 /
 ├── kaist-ai-infra/          # Bicep templates and deployment scripts
@@ -19,160 +21,91 @@ z
 
 ---
 
-## Phase 1: Infrastructure (`kaist-ai-infra/`)
+## Phase 1: Infrastructure (`kaist-ai-infra/`) ✅ Complete
 
-### Goals
-Provision all Azure resources needed for the full system so that Phase 2 and 3 can deploy into a ready environment.
-
-### 1.1 Current State
-
-The following resources are already defined in `kaist-ai-infra/main.bicep`:
+All Azure resources provisioned. See the Bicep modules in `kaist-ai-infra/modules/` for the full definitions.
 
 | Resource | Name Pattern | Status |
 |---|---|---|
 | Storage Account (PDFs) | `kaistaipdf{unique}` | ✅ Done |
 | Blob Container (`pdfs`) | — | ✅ Done |
-| Cosmos DB Account | `kaistcosmos{unique}` | ✅ Done |
-| Storage Account (Functions) | `kaistfunc{unique}` | ✅ Done |
+| Cosmos DB Account + DB + Container | `kaistcosmos{unique}` / `kaistdb` / `knowledge` | ✅ Done |
+| Function Storage Account | `kaistfunc{unique}` | ✅ Done |
 | App Service Plan (Consumption) | `kaist-asp-{unique}` | ✅ Done |
+| Function App | `kaistfunc{unique}` | ✅ Done |
+| Log Analytics + Application Insights | — | ✅ Done |
+| Azure Static Web Apps | — | ✅ Done |
+| Key Vault | `kaistakv{unique}` | ✅ Done |
 
-### 1.2 Remaining Bicep Resources
-
-The following resources still need to be added to `main.bicep`:
-
-#### 1.2.1 Log Analytics Workspace + Application Insights
-- Required before the Function App (Application Insights depends on it)
-- Enables monitoring, logging, and diagnostics across all services
-
-```
-Resource: Microsoft.OperationalInsights/workspaces
-Resource: Microsoft.Insights/components (linked to workspace)
-```
-
-#### 1.2.2 Azure Functions App
-- The App Service Plan already exists; the Function App resource itself is missing
-- Runtime: Python 3.11, OS: Linux
-- Must reference: Function Storage Account, App Service Plan, Application Insights
-- App settings to wire up: `AzureWebJobsStorage`, `FUNCTIONS_EXTENSION_VERSION`, `FUNCTIONS_WORKER_RUNTIME`, `APPLICATIONINSIGHTS_CONNECTION_STRING`
-
-```
-Resource: Microsoft.Web/sites (kind: 'functionapp,linux')
-```
-
-#### 1.2.3 Cosmos DB Database and Container
-- The Cosmos DB Account exists, but the database and container are not yet defined
-- Container needs a vector search policy and full-text index for hybrid search
-- Partition key: `/sessionId` (or `/documentId` — to be confirmed)
-- Vector dimension and distance function must be set (e.g., 1536 dims, cosine)
-
-```
-Resource: Microsoft.DocumentDB/databaseAccounts/sqlDatabases
-Resource: Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers
-```
-
-#### 1.2.4 Azure Static Web Apps *(define now, deploy in Phase 3)*
-- Define the resource in Bicep now so it is part of `azd provision`
-- Leave app deployment wired up to Phase 3 (`kaist-ai-webapp/`)
-
-```
-Resource: Microsoft.Web/staticSites
-```
-
-#### 1.2.5 Key Vault *(recommended)*
-- Centralise secrets: Cosmos DB key, Storage Account keys, future API keys
-- Grant the Function App a managed identity and Key Vault secret reader role
-- Outputs in `main.bicep` currently expose raw keys — move to Key Vault references
-
-```
-Resource: Microsoft.KeyVault/vaults
-Resource: Microsoft.Authorization/roleAssignments (Key Vault Secrets User)
-```
-
-### 1.3 `azure.yaml` Updates
-
-The current `azure.yaml` references the infra project but does not declare services for Functions or Web App. Update it to add stubs for Phase 2/3 so `azd` can manage the full lifecycle later:
-
-```yaml
-name: kaist-ai-agent
-metadata:
-  template: kaist-ai-agent@0.0.1
-services:
-  api:
-    project: kaist-ai-functions
-    language: python
-    host: function
-  web:
-    project: kaist-ai-webapp
-    language: js
-    host: staticwebapp
-```
-
-### 1.4 Bicep File Structure (Target)
-
-Split `main.bicep` into focused modules for maintainability:
-
-```
-kaist-ai-infra/
-├── main.bicep               # Orchestrator — calls all modules, exposes outputs
-├── modules/
-│   ├── storage.bicep        # PDF storage account + blob container
-│   ├── cosmos.bicep         # Cosmos DB account, database, container
-│   ├── functions.bicep      # Function storage, App Service Plan, Function App
-│   ├── monitoring.bicep     # Log Analytics workspace + Application Insights
-│   ├── staticwebapp.bicep   # Static Web Apps
-│   └── keyvault.bicep       # Key Vault + role assignments
-└── scripts/
-    └── post-provision.sh    # Any post-provision steps (e.g., seed Cosmos DB)
-```
-
-### 1.5 Outputs
-
-`main.bicep` should expose the following outputs for `azd` and downstream use:
+### Outputs
 
 | Output | Description |
 |---|---|
 | `AZURE_STORAGE_ACCOUNT_NAME` | PDF storage account name |
-| `AZURE_STORAGE_CONTAINER_NAME` | Blob container name |
+| `AZURE_STORAGE_CONTAINER_NAME` | Blob container name (`pdfs`) |
 | `AZURE_COSMOS_ENDPOINT` | Cosmos DB endpoint URL |
-| `AZURE_COSMOS_DATABASE_NAME` | Cosmos DB database name |
-| `AZURE_COSMOS_CONTAINER_NAME` | Cosmos DB container name |
+| `AZURE_COSMOS_DATABASE_NAME` | `kaistdb` |
+| `AZURE_COSMOS_CONTAINER_NAME` | `knowledge` |
 | `AZURE_FUNCTIONS_APP_NAME` | Function App name |
 | `AZURE_STATIC_WEB_APP_URL` | Static Web App default hostname |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | App Insights connection string |
 
-> **Security note:** Do not output raw account keys. Use Key Vault references or managed identity instead.
-
-### 1.6 Acceptance Criteria — Phase 1
-
-- [ ] `azd provision` completes without errors in `koreacentral`
-- [ ] All resources in section 1.2 are present in the Azure portal
-- [ ] Cosmos DB container has vector search policy and full-text index applied
-- [ ] Function App is reachable (HTTP trigger returns 200 on a health-check endpoint)
-- [ ] Application Insights receives telemetry from the Function App
-- [ ] No raw secrets appear in Bicep outputs (Key Vault or managed identity used)
-- [ ] Bicep lints cleanly (`bicep build main.bicep` produces no errors/warnings)
-
 ---
 
-## Phase 2: API Functions (`kaist-ai-functions/`) — Deferred
+## Phase 2: API Functions (`kaist-ai-functions/`) — In Progress
 
-> **Not in scope for current sprint.** Defined here for planning purposes.
+See **[docs/plan/feature-knowledge-base-pdf-management-1.0.md](plan/feature-knowledge-base-pdf-management-1.0.md)** for the detailed implementation plan.
 
-### Planned Endpoints
+### Endpoints
 
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/api/documents` | Upload and process a PDF |
-| `GET` | `/api/documents` | List uploaded documents |
-| `DELETE` | `/api/documents/{id}` | Delete a document and its embeddings |
-| `POST` | `/api/chat` | Submit a question, receive an answer |
-| `GET` | `/api/health` | Health check |
+| Method | Path | Description | Status |
+|---|---|---|---|
+| `GET` | `/api/health` | Health check | ✅ Done |
+| `POST` | `/api/chat` | Submit question, receive Gemini answer | ✅ Done |
+| `POST` | `/api/documents` | Upload PDF, extract text, embed, store | 🔲 Planned |
+| `GET` | `/api/documents` | List uploaded documents | 🔲 Planned |
+| `GET` | `/api/documents/{id}` | Get single document metadata | 🔲 Planned |
+| `PATCH` | `/api/documents/{id}` | Update document metadata (rename) | 🔲 Planned |
+| `DELETE` | `/api/documents/{id}` | Delete document (blob + CosmosDB) | 🔲 Planned |
 
-### Key Dependencies (from Phase 1)
-- Cosmos DB container with vector + full-text index
-- PDF Blob Storage container
-- Application Insights connection string
-- Key Vault for secrets
+### 2.1 File Structure (Target)
+
+```
+kaist-ai-functions/
+├── function_app.py           # Entry point — registers blueprints
+├── host.json
+├── local.settings.json
+├── requirements.txt
+├── blueprints/               # One file per API endpoint
+│   ├── __init__.py
+│   ├── upload_document.py    # POST /api/documents
+│   ├── list_documents.py     # GET /api/documents
+│   ├── get_document.py       # GET /api/documents/{id}
+│   ├── update_document.py    # PATCH /api/documents/{id}
+│   └── delete_document.py    # DELETE /api/documents/{id}
+├── models/
+│   ├── __init__.py
+│   └── document.py           # Pydantic v2 request/response models
+└── services/
+    ├── __init__.py
+    ├── blob_service.py       # Azure Blob Storage wrapper
+    ├── cosmos_service.py     # Cosmos DB wrapper
+    └── pdf_service.py        # Text extraction, chunking, embedding
+```
+
+### 2.2 CosmosDB Schema change
+
+The `knowledge` container vector embedding dimensions must change from **1 536 → 768** to match Google Gemini `text-embedding-004`. Update: `kaist-ai-infra/modules/cosmos.bicep` → `vectorEmbeddingPolicy.vectorEmbeddings[0].dimensions`.
+
+### 2.3 Acceptance Criteria — Phase 2
+
+- [ ] `POST /api/documents` stores file in Blob Storage and N chunks + 1 metadata item in CosmosDB
+- [ ] All chunks have `embedding` array of length 768
+- [ ] `GET /api/documents` returns all document metadata items
+- [ ] `PATCH /api/documents/{id}` updates `filename` in CosmosDB
+- [ ] `DELETE /api/documents/{id}` removes blob and all CosmosDB items for that `documentId`
+- [ ] All endpoints return correct HTTP status codes and Pydantic-validated response bodies
+- [ ] Each endpoint is in its own file under `blueprints/`
 
 ---
 
@@ -180,26 +113,42 @@ kaist-ai-infra/
 
 > **Not in scope for current sprint.** Defined here for planning purposes.
 
+See **[docs/plan/feature-knowledge-base-pdf-management-1.0.md](plan/feature-knowledge-base-pdf-management-1.0.md)** Phase 4 for the frontend implementation tasks.
+
 ### Stack
-- React + Vite + TypeScript
+
+- React 18 + Vite + TypeScript
 - Tailwind CSS
-- Deployed to Azure Static Web Apps (provisioned in Phase 1)
+- Deployed to Azure Static Web Apps
+
+### Target File Structure
+
+```
+kaist-ai-webapp/src/
+├── api/
+│   └── documents.ts          # Typed fetch client
+├── types/
+│   └── document.ts           # TypeScript type definitions
+├── components/
+│   ├── DocumentManager.tsx   # PDF list + upload panel
+│   ├── DocumentListItem.tsx  # Document row with rename/delete
+│   ├── PdfUpload.tsx         # Drop zone with progress bar
+│   └── ChatInterface.tsx     # Chat UI
+├── App.tsx
+└── main.tsx
+```
 
 ### Key Features
-- PDF upload UI
-- Chat interface
-- Connected to Phase 2 API via Static Web Apps linked backend
+
+- Document Manager panel: list, upload with progress, inline rename, delete with confirmation
+- Chat Interface: Q&A against the knowledge base
+- Responsive layout
 
 ---
 
-## Immediate Next Steps (Phase 1)
+## Immediate Next Steps
 
-1. **Add `monitoring.bicep` module** — Log Analytics + Application Insights
-2. **Add `functions.bicep` module** — Function App resource (App Service Plan already exists, move it here)
-3. **Add `cosmos.bicep` module** — Database + Container with vector/full-text index policy
-4. **Add `staticwebapp.bicep` module** — Static Web Apps resource stub
-5. **Add `keyvault.bicep` module** — Key Vault + managed identity role assignments
-6. **Refactor `main.bicep`** — Modularise, update outputs, remove raw key outputs
-7. **Update `azure.yaml`** — Add `api` and `web` service stubs
-8. **Run `azd provision`** — Verify all resources provision successfully
-9. **Lint and validate** — `bicep build` + manual portal checks
+1. **TASK-001** — Update `cosmos.bicep` vector dimensions 1536 → 768 and re-provision
+2. **TASK-004 to TASK-010** — Create models and service classes
+3. **TASK-011 to TASK-017** — Implement blueprint API functions and update `function_app.py`
+4. **TASK-018 to TASK-023** — Implement frontend document management UI

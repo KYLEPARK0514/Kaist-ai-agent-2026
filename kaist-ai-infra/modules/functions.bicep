@@ -1,57 +1,61 @@
+// Azure Functions module: storage account, consumption plan, function app (Python 3.11)
+
 param location string
-param uniqueSuffix string
+param resourceToken string
+param tags object = {}
 param appInsightsConnectionString string
 param cosmosEndpoint string
 param cosmosDatabaseName string
 param cosmosContainerName string
+param storageAccountName string
+param storageContainerName string
+param keyVaultEndpoint string
 
-resource functionStorageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
-  name: 'kaistfunc${uniqueSuffix}'
+resource funcStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: 'kaistfunc${resourceToken}'
   location: location
+  tags: tags
   sku: {
     name: 'Standard_LRS'
   }
   kind: 'StorageV2'
   properties: {
-    allowBlobPublicAccess: false
     minimumTlsVersion: 'TLS1_2'
     supportsHttpsTrafficOnly: true
+    allowBlobPublicAccess: false
   }
 }
 
-// Consumption plan for Linux Azure Functions
-resource functionAppServicePlan 'Microsoft.Web/serverfarms@2022-03-01' = {
-  name: 'kaist-asp-${uniqueSuffix}'
+resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
+  name: 'kaist-asp-${resourceToken}'
   location: location
+  tags: tags
   sku: {
     name: 'Y1'
     tier: 'Dynamic'
   }
-  kind: 'linux'
+  kind: 'functionapp'
   properties: {
-    reserved: true
+    reserved: true // Linux
   }
 }
 
-resource functionApp 'Microsoft.Web/sites@2022-03-01' = {
-  name: 'kaist-func-${uniqueSuffix}'
+resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
+  name: 'kaistfunc${resourceToken}'
   location: location
+  tags: union(tags, { 'azd-service-name': 'api' })
   kind: 'functionapp,linux'
   identity: {
     type: 'SystemAssigned'
   }
-  tags: {
-    'azd-service-name': 'api'
-  }
   properties: {
-    serverFarmId: functionAppServicePlan.id
-    httpsOnly: true
+    serverFarmId: appServicePlan.id
     siteConfig: {
       linuxFxVersion: 'Python|3.11'
       appSettings: [
         {
           name: 'AzureWebJobsStorage'
-          value: 'DefaultEndpointsProtocol=https;AccountName=${functionStorageAccount.name};AccountKey=${functionStorageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
+          value: 'DefaultEndpointsProtocol=https;AccountName=${funcStorage.name};AccountKey=${funcStorage.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
         }
         {
           name: 'FUNCTIONS_EXTENSION_VERSION'
@@ -66,14 +70,6 @@ resource functionApp 'Microsoft.Web/sites@2022-03-01' = {
           value: appInsightsConnectionString
         }
         {
-          name: 'AZURE_STORAGE_CONNECTION_STRING'
-          value: '@Microsoft.KeyVault(VaultName=kaist-kv-${uniqueSuffix};SecretName=pdf-storage-connection-string)'
-        }
-        {
-          name: 'AZURE_COSMOS_KEY'
-          value: '@Microsoft.KeyVault(VaultName=kaist-kv-${uniqueSuffix};SecretName=cosmos-primary-key)'
-        }
-        {
           name: 'AZURE_COSMOS_ENDPOINT'
           value: cosmosEndpoint
         }
@@ -85,11 +81,26 @@ resource functionApp 'Microsoft.Web/sites@2022-03-01' = {
           name: 'AZURE_COSMOS_CONTAINER_NAME'
           value: cosmosContainerName
         }
+        {
+          name: 'AZURE_STORAGE_ACCOUNT_NAME'
+          value: storageAccountName
+        }
+        {
+          name: 'AZURE_STORAGE_CONTAINER_NAME'
+          value: storageContainerName
+        }
+        {
+          name: 'AZURE_KEY_VAULT_ENDPOINT'
+          value: keyVaultEndpoint
+        }
       ]
+      ftpsState: 'Disabled'
+      minTlsVersion: '1.2'
     }
+    httpsOnly: true
   }
 }
 
-output functionAppName string = functionApp.name
-output functionAppHostname string = functionApp.properties.defaultHostName
-output functionAppPrincipalId string = functionApp.identity.principalId
+output appName string = functionApp.name
+output principalId string = functionApp.identity.principalId
+output defaultHostName string = functionApp.properties.defaultHostName
