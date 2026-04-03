@@ -90,19 +90,23 @@ resource knowledgeContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/
             path: '/embedding/*'
           }
         ]
+        #disable-next-line BCP037
         vectorIndexes: [
           {
             path: '/embedding'
             type: 'diskANN'
           }
         ]
+        #disable-next-line BCP037
         fullTextIndexes: [
           {
             path: '/content'
           }
         ]
       }
+      #disable-next-line BCP037
       vectorEmbeddingPolicy: {
+        #disable-next-line BCP037
         vectorEmbeddings: [
           {
             path: '/embedding'
@@ -113,6 +117,7 @@ resource knowledgeContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/
           }
         ]
       }
+      #disable-next-line BCP037
       fullTextPolicy: {
         defaultLanguage: 'en-US'
         fullTextPaths: [
@@ -132,6 +137,74 @@ resource knowledgeContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/
 }
 
 // ---------------------------------------------------------------------------
+// CosmosDB Container — conversations
+// Partition key : /id
+// ---------------------------------------------------------------------------
+
+resource conversationsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+  parent: cosmosDatabase
+  name: 'conversations'
+  properties: {
+    resource: {
+      id: 'conversations'
+      partitionKey: {
+        paths: [
+          '/id'
+        ]
+        kind: 'Hash'
+        version: 2
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        automatic: true
+        includedPaths: [
+          {
+            path: '/*'
+          }
+        ]
+        excludedPaths: []
+      }
+      defaultTtl: -1
+    }
+    options: {}
+  }
+}
+
+// ---------------------------------------------------------------------------
+// CosmosDB Container — messages
+// Partition key : /conversationId
+// ---------------------------------------------------------------------------
+
+resource messagesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+  parent: cosmosDatabase
+  name: 'messages'
+  properties: {
+    resource: {
+      id: 'messages'
+      partitionKey: {
+        paths: [
+          '/conversationId'
+        ]
+        kind: 'Hash'
+        version: 2
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        automatic: true
+        includedPaths: [
+          {
+            path: '/*'
+          }
+        ]
+        excludedPaths: []
+      }
+      defaultTtl: -1
+    }
+    options: {}
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Outputs
 // ---------------------------------------------------------------------------
 
@@ -139,3 +212,5 @@ output cosmosEndpoint string = cosmosAccount.properties.documentEndpoint
 output cosmosDatabaseName string = databaseName
 output cosmosContainerName string = containerName
 output cosmosAccountName string = cosmosAccount.name
+output cosmosConversationsContainerName string = conversationsContainer.name
+output cosmosMessagesContainerName string = messagesContainer.name
