@@ -1,69 +1,117 @@
-import type { Document, DocumentListResponse, UploadDocumentResponse } from "../types/document";
+/**
+ * Typed fetch client for the document management and chat API.
+ * All endpoints are proxied through Vite dev server to Azure Functions.
+ */
 
-const BASE = "/api/documents";
+import type {
+  ChatResponse,
+  DocumentListResponse,
+  DocumentMetadata,
+  UpdateDocumentRequest,
+  UploadDocumentResponse,
+} from '../types/document';
+
+const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
+
+// ── Document endpoints ────────────────────────────────────────────────────
 
 export async function listDocuments(): Promise<DocumentListResponse> {
-  const res = await fetch(BASE);
-  if (!res.ok) throw new Error(`listDocuments failed: ${res.status}`);
+  const res = await fetch(`${BASE}/api/documents`);
+  if (!res.ok) {
+    throw new Error(`Failed to list documents: ${res.status} ${res.statusText}`);
+  }
   return res.json() as Promise<DocumentListResponse>;
 }
 
-export async function getDocument(id: string): Promise<Document> {
-  const res = await fetch(`${BASE}/${id}`);
-  if (!res.ok) throw new Error(`getDocument failed: ${res.status}`);
-  return res.json() as Promise<Document>;
-}
-
-export async function updateDocument(id: string, filename: string): Promise<Document> {
-  const res = await fetch(`${BASE}/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ filename }),
-  });
-  if (!res.ok) throw new Error(`updateDocument failed: ${res.status}`);
-  return res.json() as Promise<Document>;
-}
-
-export async function deleteDocument(id: string): Promise<void> {
-  const res = await fetch(`${BASE}/${id}`, { method: "DELETE" });
-  if (!res.ok) throw new Error(`deleteDocument failed: ${res.status}`);
+export async function getDocument(id: string): Promise<DocumentMetadata> {
+  const res = await fetch(`${BASE}/api/documents/${encodeURIComponent(id)}`);
+  if (!res.ok) {
+    throw new Error(`Failed to get document: ${res.status} ${res.statusText}`);
+  }
+  return res.json() as Promise<DocumentMetadata>;
 }
 
 /**
- * uploadDocument uses XMLHttpRequest so callers can track progress.
- * Pass an onProgress callback receiving a 0-100 percentage.
+ * Upload a PDF file with progress tracking.
+ * @param file - The PDF File object to upload.
+ * @param onProgress - Callback receiving upload progress (0–100).
  */
 export function uploadDocument(
   file: File,
-  onProgress?: (pct: number) => void,
+  onProgress: (percent: number) => void,
 ): Promise<UploadDocumentResponse> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", BASE);
+    const formData = new FormData();
+    formData.append('file', file);
 
-    xhr.upload.addEventListener("progress", (e) => {
-      if (e.lengthComputable && onProgress) {
-        onProgress(Math.round((e.loaded / e.total) * 100));
+    xhr.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable) {
+        onProgress(Math.round((event.loaded / event.total) * 100));
       }
     });
 
-    xhr.addEventListener("load", () => {
+    xhr.addEventListener('load', () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           resolve(JSON.parse(xhr.responseText) as UploadDocumentResponse);
         } catch {
-          reject(new Error("Invalid JSON response from upload"));
+          reject(new Error('Invalid JSON in upload response'));
         }
       } else {
-        reject(new Error(`uploadDocument failed: ${xhr.status}`));
+        let message = `Upload failed: ${xhr.status}`;
+        try {
+          const body = JSON.parse(xhr.responseText) as { error?: string };
+          if (body.error) message = body.error;
+        } catch {
+          // ignore parse error
+        }
+        reject(new Error(message));
       }
     });
 
-    xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
-    xhr.addEventListener("abort", () => reject(new Error("Upload aborted")));
+    xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
+    xhr.addEventListener('abort', () => reject(new Error('Upload aborted')));
 
-    const formData = new FormData();
-    formData.append("file", file);
+    xhr.open('POST', `${BASE}/api/documents`);
     xhr.send(formData);
   });
+}
+
+export async function updateDocument(
+  id: string,
+  body: UpdateDocumentRequest,
+): Promise<DocumentMetadata> {
+  const res = await fetch(`${BASE}/api/documents/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to update document: ${res.status} ${res.statusText}`);
+  }
+  return res.json() as Promise<DocumentMetadata>;
+}
+
+export async function deleteDocument(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/documents/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to delete document: ${res.status} ${res.statusText}`);
+  }
+}
+
+// ── Chat endpoint ─────────────────────────────────────────────────────────
+
+export async function chat(question: string): Promise<ChatResponse> {
+  const res = await fetch(`${BASE}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question }),
+  });
+  if (!res.ok) {
+    throw new Error(`Chat request failed: ${res.status} ${res.statusText}`);
+  }
+  return res.json() as Promise<ChatResponse>;
 }

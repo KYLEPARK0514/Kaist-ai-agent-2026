@@ -1,87 +1,151 @@
-import { useCallback, useEffect, useState } from "react";
-import { deleteDocument, listDocuments, updateDocument } from "../api/documents";
-import type { Document } from "../types/document";
-import { DocumentListItem } from "./DocumentListItem";
-import { PdfUpload } from "./PdfUpload";
+import { useCallback, useEffect, useState } from 'react';
+import { listDocuments } from '../api/documents';
+import type { DocumentMetadata, UploadDocumentResponse } from '../types/document';
+import DocumentListItem from './DocumentListItem';
+import PdfUpload from './PdfUpload';
 
-export function DocumentManager() {
-  const [documents, setDocuments] = useState<Document[]>([]);
+export default function DocumentManager() {
+  const [documents, setDocuments] = useState<DocumentMetadata[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const fetchDocuments = useCallback(async () => {
+  const loadDocuments = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setFetchError(null);
     try {
-      const res = await listDocuments();
-      setDocuments(res.documents);
+      const data = await listDocuments();
+      setDocuments(data.documents);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load documents");
+      setFetchError(err instanceof Error ? err.message : 'Failed to load documents.');
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void fetchDocuments();
-  }, [fetchDocuments]);
+    void loadDocuments();
+  }, [loadDocuments]);
 
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteDocument(id);
-      await fetchDocuments();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Delete failed");
-    }
+  const handleUploaded = (uploaded: UploadDocumentResponse) => {
+    // Optimistically prepend – full metadata not available until next list,
+    // so append a synthetic entry and sort by uploadedAt DESC.
+    const synthetic: DocumentMetadata = {
+      id: uploaded.documentId,
+      documentId: uploaded.documentId,
+      filename: uploaded.filename,
+      blobName: uploaded.filename,
+      chunkCount: uploaded.chunkCount,
+      uploadedAt: uploaded.uploadedAt,
+    };
+    setDocuments((prev) =>
+      [synthetic, ...prev].sort(
+        (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime(),
+      ),
+    );
   };
 
-  const handleRename = async (id: string, newFilename: string) => {
-    try {
-      await updateDocument(id, newFilename);
-      await fetchDocuments();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Rename failed");
-    }
+  const handleRenamed = (updated: DocumentMetadata) => {
+    setDocuments((prev) =>
+      prev.map((d) => (d.documentId === updated.documentId ? updated : d)),
+    );
+  };
+
+  const handleDeleted = (documentId: string) => {
+    setDocuments((prev) => prev.filter((d) => d.documentId !== documentId));
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <PdfUpload onUploaded={() => void fetchDocuments()} />
+    <section className="flex h-full flex-col gap-4 p-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-900">Documents</h2>
+        <button
+          onClick={() => void loadDocuments()}
+          disabled={loading}
+          className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40"
+          aria-label="Refresh document list"
+          title="Refresh"
+        >
+          <svg
+            className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+        </button>
+      </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-        <h2 className="text-xl font-semibold mb-3 text-gray-800">2. Documents</h2>
+      {/* Upload zone */}
+      <PdfUpload onUploaded={handleUploaded} />
 
-        {error && (
-          <div className="mb-3 px-3 py-2 rounded bg-red-50 border border-red-200 text-sm text-red-700">
-            {error}
-          </div>
-        )}
-
-        {loading ? (
-          <div className="flex items-center justify-center py-8 text-gray-400 text-sm">
-            <svg className="animate-spin w-5 h-5 mr-2 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+      {/* Document list */}
+      <div className="flex-1 overflow-y-auto">
+        {loading && documents.length === 0 ? (
+          <div className="flex h-24 items-center justify-center">
+            <svg
+              className="h-6 w-6 animate-spin text-blue-500"
+              fill="none"
+              viewBox="0 0 24 24"
+              aria-label="Loading"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v8H4z"
+              />
             </svg>
-            Loading documents…
+          </div>
+        ) : fetchError ? (
+          <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+            <p className="font-medium">Failed to load documents</p>
+            <p className="mt-0.5">{fetchError}</p>
+            <button
+              onClick={() => void loadDocuments()}
+              className="mt-2 text-red-600 underline hover:text-red-800"
+            >
+              Retry
+            </button>
           </div>
         ) : documents.length === 0 ? (
-          <p className="text-sm text-gray-400 italic text-center py-6">
-            No documents yet. Upload a PDF above.
+          <p className="py-6 text-center text-sm text-gray-400">
+            No documents yet. Upload a PDF above to get started.
           </p>
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ul className="space-y-2">
             {documents.map((doc) => (
               <DocumentListItem
-                key={doc.id}
+                key={doc.documentId}
                 document={doc}
-                onDelete={(id) => void handleDelete(id)}
-                onRename={(id, name) => void handleRename(id, name)}
+                onRenamed={handleRenamed}
+                onDeleted={handleDeleted}
               />
             ))}
           </ul>
         )}
       </div>
-    </div>
+
+      {/* Footer count */}
+      {documents.length > 0 && (
+        <p className="text-xs text-gray-400">
+          {documents.length} document{documents.length !== 1 ? 's' : ''}
+        </p>
+      )}
+    </section>
   );
 }

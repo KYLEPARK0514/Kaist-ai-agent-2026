@@ -1,132 +1,169 @@
+"""POST /api/documents — Upload a PDF, extract text, embed chunks, and persist."""
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 
 import azure.functions as func
+from pypdf.errors import PdfStreamError
 
-from models.document import (
-    ChunkRecord,
-    DocumentRecord,
-    DocumentStatus,
-    UploadDocumentResponse,
-)
-from services.blob_service import BlobStorageService
-from services.cosmos_service import CosmosService
-from services.pdf_service import PdfService
+from models.document import UploadDocumentResponse
+from services import blob_service, cosmos_service, pdf_service
+
+logger = logging.getLogger(__name__)
 
 bp = func.Blueprint()
 
-_MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
-
-@bp.route(route="documents", methods=["POST"], auth_level=func.AuthLevel.FUNCTION)
+@bp.route(route="documents", methods=["POST"])
 def upload_document(req: func.HttpRequest) -> func.HttpResponse:
-    # --- Validate multipart/form-data ---
-    content_type = req.headers.get("Content-Type", "")
-    if "multipart/form-data" not in content_type:
-        return _error(400, "Request must be multipart/form-data")
+    """Upload a PDF file, extract text content, generate embeddings, and store.
 
-    file = req.files.get("file")
-    if file is None:
-        return _error(400, "Missing 'file' field in form data")
+    Multipart form-data fields
+    --------------------------
+    file : bytes  — PDF binary (required)
 
-    if file.mimetype != "application/pdf":
-        return _error(400, "Uploaded file must be application/pdf")
+    Returns
+    -------
+    201  UploadDocumentResponse JSON on success.
+    400  If no file part or the file is not a PDF.
+    500  On any Azure / Gemini service error.
+    """
+    # ------------------------------------------------------------------
+    # 1. Parse uploaded file
+    # ------------------------------------------------------------------
+    file_data: bytes | None = None
+    original_filename = "document.pdf"
 
-    pdf_bytes = file.read()
-    if len(pdf_bytes) > _MAX_FILE_SIZE:
-        return _error(413, "File exceeds the 50 MB maximum")
+    # Try multipart form-data first
+    files = req.files
+    if "file" in files:
+        uploaded = files["file"]
+        file_data = uploaded.read()
+        original_filename = uploaded.filename or original_filename
+    else:
+        # Fall back to raw body (content-type: application/pdf)
+        body = req.get_body()
+        if body:
+            file_data = body
+            # Try to extract filename from Content-Disposition header
+            content_disposition = req.headers.get("Content-Disposition", "")
+            if "filename=" in content_disposition:
+                for part in content_disposition.split(";"):
+                    part = part.strip()
+                    if part.startswith("filename="):
+                        original_filename = part[len("filename="):].strip('"').strip("'")
 
-    filename: str = file.filename or "document.pdf"
-    document_id = f"doc_{uuid.uuid4().hex}"
-    blob_name = f"{document_id}/{filename}"
-    now = _utc_now()
-
-    blob_svc = BlobStorageService()
-    cosmos_svc = CosmosService()
-    pdf_svc = PdfService()
-
-    try:
-        # 1. Upload to Blob Storage
-        blob_svc.upload_blob(blob_name, pdf_bytes)
-
-        # 2. Write initial DocumentRecord with status=processing
-        doc_record = DocumentRecord(
-            id=document_id,
-            documentId=document_id,
-            filename=filename,
-            blobName=blob_name,
-            fileSize=len(pdf_bytes),
-            status=DocumentStatus.processing,
-            chunkCount=0,
-            uploadedAt=now,
-            updatedAt=now,
-        )
-        cosmos_svc.upsert_item(doc_record.model_dump())
-
-        # 3. Extract text → chunk → embed
-        text = pdf_svc.extract_text(pdf_bytes)
-        chunks = pdf_svc.chunk_text(text)
-        embeddings = pdf_svc.embed_chunks(chunks)
-
-        # 4. Write each ChunkRecord
-        for i, (chunk_content, embedding) in enumerate(zip(chunks, embeddings)):
-            chunk_record = ChunkRecord(
-                id=f"{document_id}_chunk_{i}",
-                documentId=document_id,
-                chunkIndex=i,
-                content=chunk_content,
-                embedding=embedding,
-            )
-            cosmos_svc.upsert_item(chunk_record.model_dump())
-
-        # 5. Update DocumentRecord to processed
-        doc_record.status = DocumentStatus.processed
-        doc_record.chunkCount = len(chunks)
-        doc_record.updatedAt = _utc_now()
-        cosmos_svc.upsert_item(doc_record.model_dump())
-
-        response = UploadDocumentResponse(
-            id=document_id,
-            filename=filename,
-            status=DocumentStatus.processed,
-            message=f"PDF uploaded and processed successfully with {len(chunks)} chunks.",
-        )
+    if not file_data:
         return func.HttpResponse(
-            response.model_dump_json(),
-            status_code=201,
+            json.dumps({"error": "A PDF file is required. Send as multipart/form-data field 'file'."}),
+            status_code=400,
             mimetype="application/json",
         )
 
-    except Exception as exc:  # noqa: BLE001
-        # Mark document as failed so the record is not left in an ambiguous state
+    # Reject clearly non-PDF files by magic bytes
+    if not file_data.startswith(b"%PDF"):
+        return func.HttpResponse(
+            json.dumps({"error": "Uploaded file does not appear to be a valid PDF."}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
+    # ------------------------------------------------------------------
+    # 2. Generate identifiers
+    # ------------------------------------------------------------------
+    document_id = str(uuid.uuid4())
+    blob_name = f"{document_id}/{original_filename}"
+    uploaded_at = datetime.now(timezone.utc).isoformat()
+
+    try:
+        # --------------------------------------------------------------
+        # 3. Upload blob
+        # --------------------------------------------------------------
+        blob_service.upload_blob(blob_name, file_data, content_type="application/pdf")
+        logger.info("Uploaded blob: %s", blob_name)
+
+        # --------------------------------------------------------------
+        # 4. Extract text & chunk
+        # --------------------------------------------------------------
+        raw_text = pdf_service.extract_text(file_data)
+        chunks = pdf_service.chunk_text(raw_text)
+        logger.info("Extracted %d chunks from %s", len(chunks), original_filename)
+
+        # --------------------------------------------------------------
+        # 5. Generate embeddings
+        # --------------------------------------------------------------
+        embeddings = pdf_service.embed_texts(chunks)
+        logger.info("Generated %d embeddings", len(embeddings))
+
+        # --------------------------------------------------------------
+        # 6. Persist metadata item
+        # --------------------------------------------------------------
+        metadata_item: dict = {
+            "id": document_id,
+            "documentId": document_id,
+            "type": "metadata",
+            "filename": original_filename,
+            "blobName": blob_name,
+            "chunkCount": len(chunks),
+            "uploadedAt": uploaded_at,
+        }
+        cosmos_service.create_metadata_item(metadata_item)
+
+        # --------------------------------------------------------------
+        # 7. Persist chunk items
+        # --------------------------------------------------------------
+        for idx, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
+            chunk_item: dict = {
+                "id": str(uuid.uuid4()),
+                "documentId": document_id,
+                "type": "chunk",
+                "content": chunk_text,
+                "chunkIndex": idx,
+                "embedding": embedding,
+            }
+            cosmos_service.create_chunk_item(chunk_item)
+
+        logger.info("Persisted metadata + %d chunks for document %s", len(chunks), document_id)
+
+    except (ValueError, PdfStreamError) as exc:
+        logger.warning("PDF processing error: %s", exc)
+        # Clean up blob if already uploaded
         try:
-            failed_record = DocumentRecord(
-                id=document_id,
-                documentId=document_id,
-                filename=filename,
-                blobName=blob_name,
-                fileSize=len(pdf_bytes),
-                status=DocumentStatus.failed,
-                chunkCount=0,
-                uploadedAt=now,
-                updatedAt=_utc_now(),
-            )
-            cosmos_svc.upsert_item(failed_record.model_dump())
+            blob_service.delete_blob(blob_name)
         except Exception:
             pass
-        return _error(500, f"Processing failed: {exc}")
+        return func.HttpResponse(
+            json.dumps({"error": f"Could not process PDF: {exc}"}),
+            status_code=400,
+            mimetype="application/json",
+        )
+    except Exception as exc:
+        logger.exception("Unexpected error during document upload: %s", exc)
+        # Best-effort cleanup
+        try:
+            blob_service.delete_blob(blob_name)
+        except Exception:
+            pass
+        return func.HttpResponse(
+            json.dumps({"error": "Internal server error. Please try again later."}),
+            status_code=500,
+            mimetype="application/json",
+        )
 
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _error(status_code: int, message: str) -> func.HttpResponse:
+    # ------------------------------------------------------------------
+    # 8. Return 201 Created
+    # ------------------------------------------------------------------
+    response = UploadDocumentResponse(
+        documentId=document_id,
+        filename=original_filename,
+        chunkCount=len(chunks),
+        uploadedAt=uploaded_at,
+    )
     return func.HttpResponse(
-        json.dumps({"error": message}),
-        status_code=status_code,
+        response.model_dump_json(),
+        status_code=201,
         mimetype="application/json",
     )

@@ -1,44 +1,94 @@
+"""DELETE /api/documents/{id} — Delete a document (blob + all CosmosDB items)."""
 from __future__ import annotations
 
 import json
+import logging
 
 import azure.functions as func
-from azure.cosmos import exceptions
 
-from services.blob_service import BlobStorageService
-from services.cosmos_service import CosmosService
+from services import blob_service, cosmos_service
+
+logger = logging.getLogger(__name__)
 
 bp = func.Blueprint()
 
 
-@bp.route(route="documents/{id}", methods=["DELETE"], auth_level=func.AuthLevel.FUNCTION)
+@bp.route(route="documents/{id}", methods=["DELETE"])
 def delete_document(req: func.HttpRequest) -> func.HttpResponse:
-    document_id = req.route_params.get("id")
+    """Delete a document's blob and all associated CosmosDB items.
 
-    cosmos_svc = CosmosService()
+    Path parameters
+    ---------------
+    id : str  — The documentId.
+
+    Returns
+    -------
+    200  JSON confirmation with itemsDeleted count.
+    404  If no document with that id exists in CosmosDB.
+    500  On any service error.
+    """
+    document_id: str = req.route_params.get("id", "").strip()
+    if not document_id:
+        return func.HttpResponse(
+            json.dumps({"error": "Document id is required."}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
+    # ------------------------------------------------------------------
+    # 1. Verify the document exists and retrieve blob name
+    # ------------------------------------------------------------------
     try:
-        item = cosmos_svc.get_item(item_id=document_id, partition_key=document_id)
-    except exceptions.CosmosResourceNotFoundError:
+        metadata = cosmos_service.get_document(document_id)
+    except Exception as exc:
+        logger.exception("Failed to look up document %s: %s", document_id, exc)
         return func.HttpResponse(
-            json.dumps({"error": f"Document '{document_id}' not found"}),
+            json.dumps({"error": "Internal server error. Please try again later."}),
+            status_code=500,
+            mimetype="application/json",
+        )
+
+    if metadata is None:
+        return func.HttpResponse(
+            json.dumps({"error": f"Document '{document_id}' not found."}),
             status_code=404,
             mimetype="application/json",
         )
 
-    if item.get("type") != "document":
+    blob_name: str = metadata.get("blobName", "")
+
+    # ------------------------------------------------------------------
+    # 2. Delete all CosmosDB items (metadata + chunks)
+    # ------------------------------------------------------------------
+    try:
+        items_deleted = cosmos_service.delete_document_items(document_id)
+        logger.info("Deleted %d CosmosDB items for document %s", items_deleted, document_id)
+    except Exception as exc:
+        logger.exception("Failed to delete CosmosDB items for document %s: %s", document_id, exc)
         return func.HttpResponse(
-            json.dumps({"error": f"Document '{document_id}' not found"}),
-            status_code=404,
+            json.dumps({"error": "Internal server error. Please try again later."}),
+            status_code=500,
             mimetype="application/json",
         )
 
-    blob_name: str = item["blobName"]
+    # ------------------------------------------------------------------
+    # 3. Delete blob (best-effort; log but don't fail the request)
+    # ------------------------------------------------------------------
+    if blob_name:
+        try:
+            blob_service.delete_blob(blob_name)
+            logger.info("Deleted blob: %s", blob_name)
+        except Exception as exc:
+            logger.warning("Could not delete blob %s: %s", blob_name, exc)
 
-    # Delete blob from Blob Storage
-    blob_svc = BlobStorageService()
-    blob_svc.delete_blob(blob_name)
-
-    # Delete all CosmosDB items for this document (metadata + all chunks)
-    cosmos_svc.delete_items_by_document(document_id)
-
-    return func.HttpResponse(status_code=204)
+    return func.HttpResponse(
+        json.dumps(
+            {
+                "documentId": document_id,
+                "deleted": True,
+                "itemsDeleted": items_deleted,
+            }
+        ),
+        status_code=200,
+        mimetype="application/json",
+    )

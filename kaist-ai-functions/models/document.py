@@ -1,64 +1,44 @@
+"""Pydantic v2 request/response models for document management."""
 from __future__ import annotations
 
-from enum import Enum
+from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field
 
 
-class DocumentStatus(str, Enum):
-    processing = "processing"
-    processed = "processed"
-    failed = "failed"
+class DocumentMetadataResponse(BaseModel):
+    """Response model for a single document's metadata."""
 
+    id: str = Field(..., description="Unique document identifier (same as documentId)")
+    documentId: str = Field(..., description="Document partition key")
+    filename: str = Field(..., description="Original uploaded filename")
+    blobName: str = Field(..., description="Blob storage object name")
+    chunkCount: int = Field(..., description="Number of text chunks stored")
+    uploadedAt: str = Field(..., description="ISO 8601 upload timestamp")
 
-class DocumentRecord(BaseModel):
-    id: str
-    documentId: str
-    type: str = "document"
-    filename: str
-    blobName: str
-    fileSize: int
-    status: DocumentStatus
-    chunkCount: int = 0
-    uploadedAt: str
-    updatedAt: str
-
-
-class ChunkRecord(BaseModel):
-    id: str
-    documentId: str
-    type: str = "chunk"
-    chunkIndex: int
-    content: str
-    embedding: list[float]
-
-
-class UploadDocumentResponse(BaseModel):
-    id: str
-    filename: str
-    status: DocumentStatus
-    message: str
-
-
-class DocumentResponse(BaseModel):
-    id: str
-    filename: str
-    fileSize: int
-    status: DocumentStatus
-    chunkCount: int
-    uploadedAt: str
-    updatedAt: str
+    model_config = {"populate_by_name": True}
 
 
 class DocumentListResponse(BaseModel):
-    documents: list[DocumentResponse]
-    total: int
+    """Response model for the document list endpoint."""
+
+    documents: list[DocumentMetadataResponse] = Field(
+        default_factory=list, description="List of document metadata items"
+    )
+    count: int = Field(..., description="Total number of documents")
 
 
-class GetDocumentResponse(DocumentResponse):
-    blobName: str
+class UploadDocumentResponse(BaseModel):
+    """Response model for a successful PDF upload."""
+
+    documentId: str = Field(..., description="Newly created document identifier")
+    filename: str = Field(..., description="Original uploaded filename")
+    chunkCount: int = Field(..., description="Number of text chunks generated and embedded")
+    uploadedAt: str = Field(..., description="ISO 8601 upload timestamp")
 
 
 class UpdateDocumentRequest(BaseModel):
-    filename: str
+    """Request body for renaming a document."""
+
+    filename: str = Field(..., min_length=1, description="New filename for the document")

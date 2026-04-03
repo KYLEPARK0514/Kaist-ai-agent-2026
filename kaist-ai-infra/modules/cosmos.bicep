@@ -1,17 +1,30 @@
-// CosmosDB module: Serverless account, kaistdb database, knowledge container
-// Vector embedding policy uses dimensions=768 to match Gemini text-embedding-004
+// CosmosDB module — kaist-ai-infra/modules/cosmos.bicep
+// Vector embedding dimensions: 768 (Google Gemini text-embedding-004)
 
-param location string
-param resourceToken string
-param tags object = {}
+@description('Location for all resources.')
+param location string = resourceGroup().location
 
-resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
-  name: 'kaistcosmos${resourceToken}'
+@description('Unique suffix appended to resource names to ensure global uniqueness.')
+param uniqueSuffix string
+
+@description('CosmosDB database name.')
+param databaseName string = 'kaistdb'
+
+@description('CosmosDB knowledge container name.')
+param containerName string = 'knowledge'
+
+// ---------------------------------------------------------------------------
+// CosmosDB Account
+// ---------------------------------------------------------------------------
+
+resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
+  name: 'kaistcosmos${uniqueSuffix}'
   location: location
-  tags: tags
   kind: 'GlobalDocumentDB'
   properties: {
-    databaseAccountOfferType: 'Standard'
+    consistencyPolicy: {
+      defaultConsistencyLevel: 'Session'
+    }
     locations: [
       {
         locationName: location
@@ -19,63 +32,185 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
         isZoneRedundant: false
       }
     ]
-    consistencyPolicy: {
-      defaultConsistencyLevel: 'Session'
-    }
-    capabilities: [
-      { name: 'EnableServerless' }
-    ]
+    databaseAccountOfferType: 'Standard'
     enableFreeTier: false
+    capabilities: [
+      {
+        name: 'EnableNoSQLVectorSearch'
+      }
+    ]
   }
 }
 
-resource cosmosDatabase 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-11-15' = {
+// ---------------------------------------------------------------------------
+// CosmosDB Database
+// ---------------------------------------------------------------------------
+
+resource cosmosDatabase 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-05-15' = {
   parent: cosmosAccount
-  name: 'kaistdb'
+  name: databaseName
   properties: {
     resource: {
-      id: 'kaistdb'
+      id: databaseName
     }
   }
 }
 
-resource cosmosContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-11-15' = {
+// ---------------------------------------------------------------------------
+// CosmosDB Container — knowledge
+// Partition key : /documentId
+// Vector index  : embedding (cosine, 768 dims — Gemini text-embedding-004)
+// Full-text index: content  (BM25 for hybrid search)
+// ---------------------------------------------------------------------------
+
+resource knowledgeContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
   parent: cosmosDatabase
-  name: 'knowledge'
+  name: containerName
   properties: {
     resource: {
-      id: 'knowledge'
+      id: containerName
       partitionKey: {
         paths: [
           '/documentId'
         ]
         kind: 'Hash'
+        version: 2
       }
       indexingPolicy: {
         indexingMode: 'consistent'
+        automatic: true
         includedPaths: [
-          { path: '/*' }
+          {
+            path: '/*'
+          }
         ]
         excludedPaths: [
-          { path: '/embedding/*' }
+          {
+            // Exclude the embedding array from standard index to save RU/s
+            path: '/embedding/*'
+          }
+        ]
+        #disable-next-line BCP037
+        vectorIndexes: [
+          {
+            path: '/embedding'
+            type: 'diskANN'
+          }
+        ]
+        #disable-next-line BCP037
+        fullTextIndexes: [
+          {
+            path: '/content'
+          }
         ]
       }
+      #disable-next-line BCP037
       vectorEmbeddingPolicy: {
+        #disable-next-line BCP037
         vectorEmbeddings: [
           {
             path: '/embedding'
             dataType: 'float32'
+            // TASK-001: Updated from 1536 → 768 to match Gemini text-embedding-004
             dimensions: 768
             distanceFunction: 'cosine'
           }
         ]
       }
+      #disable-next-line BCP037
+      fullTextPolicy: {
+        defaultLanguage: 'en-US'
+        fullTextPaths: [
+          {
+            path: '/content'
+            language: 'en-US'
+          }
+        ]
+      }
+    }
+    options: {
+      autoscaleSettings: {
+        maxThroughput: 4000
+      }
     }
   }
 }
 
-output endpoint string = cosmosAccount.properties.documentEndpoint
-output accountName string = cosmosAccount.name
-output databaseName string = cosmosDatabase.name
-output containerName string = cosmosContainer.name
-output accountId string = cosmosAccount.id
+// ---------------------------------------------------------------------------
+// CosmosDB Container — conversations
+// Partition key : /id
+// ---------------------------------------------------------------------------
+
+resource conversationsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+  parent: cosmosDatabase
+  name: 'conversations'
+  properties: {
+    resource: {
+      id: 'conversations'
+      partitionKey: {
+        paths: [
+          '/id'
+        ]
+        kind: 'Hash'
+        version: 2
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        automatic: true
+        includedPaths: [
+          {
+            path: '/*'
+          }
+        ]
+        excludedPaths: []
+      }
+      defaultTtl: -1
+    }
+    options: {}
+  }
+}
+
+// ---------------------------------------------------------------------------
+// CosmosDB Container — messages
+// Partition key : /conversationId
+// ---------------------------------------------------------------------------
+
+resource messagesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+  parent: cosmosDatabase
+  name: 'messages'
+  properties: {
+    resource: {
+      id: 'messages'
+      partitionKey: {
+        paths: [
+          '/conversationId'
+        ]
+        kind: 'Hash'
+        version: 2
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        automatic: true
+        includedPaths: [
+          {
+            path: '/*'
+          }
+        ]
+        excludedPaths: []
+      }
+      defaultTtl: -1
+    }
+    options: {}
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Outputs
+// ---------------------------------------------------------------------------
+
+output cosmosEndpoint string = cosmosAccount.properties.documentEndpoint
+output cosmosDatabaseName string = databaseName
+output cosmosContainerName string = containerName
+output cosmosAccountName string = cosmosAccount.name
+output cosmosConversationsContainerName string = conversationsContainer.name
+output cosmosMessagesContainerName string = messagesContainer.name

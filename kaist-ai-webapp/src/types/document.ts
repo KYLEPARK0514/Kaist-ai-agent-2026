@@ -1,23 +1,37 @@
-export type DocumentStatus = "processing" | "processed" | "failed";
+/**
+ * TypeScript type definitions for document management API responses.
+ * Mirrors the Pydantic models in kaist-ai-functions/models/document.py.
+ */
 
-export interface Document {
+export interface DocumentMetadata {
   id: string;
+  documentId: string;
   filename: string;
-  fileSize: number;
-  status: DocumentStatus;
+  blobName: string;
   chunkCount: number;
   uploadedAt: string;
-  updatedAt: string;
 }
 
 export interface DocumentListResponse {
-  documents: Document[];
-  total: number;
+  documents: DocumentMetadata[];
+  count: number;
 }
 
 export interface UploadDocumentResponse {
-  id: string;
+  documentId: string;
   filename: string;
-  status: DocumentStatus;
-  message: string;
+  chunkCount: number;
+  uploadedAt: string;
+}
+
+export interface UpdateDocumentRequest {
+  filename: string;
+}
+
+export interface ChatRequest {
+  question: string;
+}
+
+export interface ChatResponse {
+  answer: string;
 }

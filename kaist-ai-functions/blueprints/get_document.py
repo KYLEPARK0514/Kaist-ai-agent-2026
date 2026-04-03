@@ -1,46 +1,65 @@
+"""GET /api/documents/{id} — Return metadata for a single document."""
 from __future__ import annotations
 
 import json
+import logging
 
 import azure.functions as func
-from azure.cosmos import exceptions
 
-from models.document import GetDocumentResponse
-from services.cosmos_service import CosmosService
+from models.document import DocumentMetadataResponse
+from services import cosmos_service
+
+logger = logging.getLogger(__name__)
 
 bp = func.Blueprint()
 
 
-@bp.route(route="documents/{id}", methods=["GET"], auth_level=func.AuthLevel.FUNCTION)
+@bp.route(route="documents/{id}", methods=["GET"])
 def get_document(req: func.HttpRequest) -> func.HttpResponse:
-    document_id = req.route_params.get("id")
+    """Return the metadata item for the requested document.
 
-    cosmos_svc = CosmosService()
+    Path parameters
+    ---------------
+    id : str  — The documentId.
+
+    Returns
+    -------
+    200  DocumentMetadataResponse JSON if found.
+    404  If no document with that id exists.
+    500  On any CosmosDB service error.
+    """
+    document_id: str = req.route_params.get("id", "").strip()
+    if not document_id:
+        return func.HttpResponse(
+            json.dumps({"error": "Document id is required."}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
     try:
-        item = cosmos_svc.get_item(item_id=document_id, partition_key=document_id)
-    except exceptions.CosmosResourceNotFoundError:
+        item = cosmos_service.get_document(document_id)
+    except Exception as exc:
+        logger.exception("Failed to retrieve document %s: %s", document_id, exc)
         return func.HttpResponse(
-            json.dumps({"error": f"Document '{document_id}' not found"}),
+            json.dumps({"error": "Internal server error. Please try again later."}),
+            status_code=500,
+            mimetype="application/json",
+        )
+
+    if item is None:
+        return func.HttpResponse(
+            json.dumps({"error": f"Document '{document_id}' not found."}),
             status_code=404,
             mimetype="application/json",
         )
 
-    if item.get("type") != "document":
-        return func.HttpResponse(
-            json.dumps({"error": f"Document '{document_id}' not found"}),
-            status_code=404,
-            mimetype="application/json",
-        )
-
-    response = GetDocumentResponse(
+    response = DocumentMetadataResponse(
         id=item["id"],
+        documentId=item["documentId"],
         filename=item["filename"],
-        fileSize=item["fileSize"],
-        status=item["status"],
-        chunkCount=item.get("chunkCount", 0),
-        uploadedAt=item["uploadedAt"],
-        updatedAt=item["updatedAt"],
         blobName=item["blobName"],
+        chunkCount=item["chunkCount"],
+        uploadedAt=item["uploadedAt"],
     )
     return func.HttpResponse(
         response.model_dump_json(),
