@@ -1,0 +1,12 @@
+# Azure Functions
+.python_packages/
+__pycache__/
+*.py[cod]
+*$py.class
+.vscode/
+.venv/
+venv/
+ENV/
+env.bak/
+venv.bak/
+local.settings.json

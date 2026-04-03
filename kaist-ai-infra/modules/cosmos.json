@@ -1,0 +1,155 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.41.2.15936",
+      "templateHash": "10160283571122309644"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string"
+    },
+    "uniqueSuffix": {
+      "type": "string"
+    }
+  },
+  "variables": {
+    "databaseName": "kaistdb",
+    "containerName": "knowledge"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.DocumentDB/databaseAccounts",
+      "apiVersion": "2024-11-15",
+      "name": "[format('kaistcosmos{0}', parameters('uniqueSuffix'))]",
+      "location": "[parameters('location')]",
+      "kind": "GlobalDocumentDB",
+      "properties": {
+        "databaseAccountOfferType": "Standard",
+        "capabilities": [
+          {
+            "name": "EnableServerless"
+          },
+          {
+            "name": "EnableNoSQLVectorSearch"
+          },
+          {
+            "name": "EnableNoSQLFullTextSearch"
+          }
+        ],
+        "consistencyPolicy": {
+          "defaultConsistencyLevel": "Session"
+        },
+        "locations": [
+          {
+            "locationName": "[parameters('location')]",
+            "failoverPriority": 0,
+            "isZoneRedundant": false
+          }
+        ],
+        "disableLocalAuth": false
+      }
+    },
+    {
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
+      "apiVersion": "2024-11-15",
+      "name": "[format('{0}/{1}', format('kaistcosmos{0}', parameters('uniqueSuffix')), variables('databaseName'))]",
+      "properties": {
+        "resource": {
+          "id": "[variables('databaseName')]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts', format('kaistcosmos{0}', parameters('uniqueSuffix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+      "apiVersion": "2024-11-15",
+      "name": "[format('{0}/{1}/{2}', format('kaistcosmos{0}', parameters('uniqueSuffix')), variables('databaseName'), variables('containerName'))]",
+      "properties": {
+        "resource": {
+          "id": "[variables('containerName')]",
+          "partitionKey": {
+            "paths": [
+              "/documentId"
+            ],
+            "kind": "Hash",
+            "version": 2
+          },
+          "indexingPolicy": {
+            "indexingMode": "consistent",
+            "automatic": true,
+            "includedPaths": [
+              {
+                "path": "/*"
+              }
+            ],
+            "excludedPaths": [
+              {
+                "path": "/\"_etag\"/?"
+              },
+              {
+                "path": "/embedding/*"
+              }
+            ],
+            "vectorIndexes": [
+              {
+                "path": "/embedding",
+                "type": "diskANN"
+              }
+            ],
+            "fullTextIndexes": [
+              {
+                "path": "/content"
+              }
+            ]
+          },
+          "vectorEmbeddingPolicy": {
+            "vectorEmbeddings": [
+              {
+                "path": "/embedding",
+                "dataType": "float32",
+                "dimensions": 1536,
+                "distanceFunction": "cosine"
+              }
+            ]
+          },
+          "fullTextPolicy": {
+            "defaultLanguage": "en-US",
+            "fullTextPaths": [
+              {
+                "path": "/content",
+                "language": "en-US"
+              }
+            ]
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', format('kaistcosmos{0}', parameters('uniqueSuffix')), variables('databaseName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "cosmosAccountName": {
+      "type": "string",
+      "value": "[format('kaistcosmos{0}', parameters('uniqueSuffix'))]"
+    },
+    "cosmosEndpoint": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.DocumentDB/databaseAccounts', format('kaistcosmos{0}', parameters('uniqueSuffix'))), '2024-11-15').documentEndpoint]"
+    },
+    "cosmosDatabaseName": {
+      "type": "string",
+      "value": "[variables('databaseName')]"
+    },
+    "cosmosContainerName": {
+      "type": "string",
+      "value": "[variables('containerName')]"
+    }
+  }
+}
