@@ -1,5 +1,10 @@
+<<<<<<< HEAD
 import { ChatInterface } from "./components/ChatInterface";
 import { DocumentManager } from "./components/DocumentManager";
+=======
+import { PdfUpload } from "./components/PdfUpload";
+import { ChatInterface } from "./components/ChatInterface";
+>>>>>>> origin/main
 
 function App() {
   return (
@@ -14,6 +19,7 @@ function App() {
           </p>
         </div>
       </header>
+<<<<<<< HEAD
 
       <main className="max-w-5xl mx-auto px-4 py-8">
         <div className="grid grid-cols-1 md:grid-cols-[1fr_1.5fr] gap-8">
@@ -24,6 +30,16 @@ function App() {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
+=======
+      
+      <main className="max-w-5xl mx-auto px-4 py-8">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_1.5fr] gap-8">
+          <aside className="flex flex-col gap-6">
+            <PdfUpload />
+            <div className="bg-indigo-50 p-5 rounded-xl text-sm text-indigo-800 border border-indigo-100 shadow-sm">
+              <h3 className="font-semibold mb-2 flex items-center gap-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+>>>>>>> origin/main
                 How it works
               </h3>
               <ol className="list-decimal pl-5 space-y-2 text-indigo-700/80">
@@ -33,7 +49,11 @@ function App() {
               </ol>
             </div>
           </aside>
+<<<<<<< HEAD
 
+=======
+          
+>>>>>>> origin/main
           <section className="h-[600px] flex flex-col">
             <ChatInterface />
           </section>
@@ -44,3 +64,4 @@ function App() {
 }
 
 export default App;
+
