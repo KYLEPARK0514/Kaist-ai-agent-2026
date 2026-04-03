@@ -55,6 +55,9 @@ cover/
 *.mo
 *.pot
 
+# Azure Functions local settings (contains secrets)
+local.settings.json
+
 # Django stuff:
 *.log
 local_settings.py
@@ -133,6 +136,9 @@ celerybeat.pid
 
 # SageMath parsed files
 *.sage.py
+
+# Azure Functions local settings (may contain secrets)
+local.settings.json
 
 # Environments
 .env
