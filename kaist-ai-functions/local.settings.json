@@ -1,0 +1,8 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "GOOGLE_API_KEY": "AIzaSyD5zsdViPVkw3IGQFk6NclYoRA31yQyAoU"
+  }
+}

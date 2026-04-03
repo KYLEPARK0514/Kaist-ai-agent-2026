@@ -1,6 +1,10 @@
 azure-functions
-# Added for future implementations
-azure-cosmos
 azure-storage-blob
-pypdf2
-openai
+azure-cosmos
+azure-identity
+azure-keyvault-secrets
+langchain-google-genai
+langchain
+langchain-community
+pypdf
+python-dotenv
