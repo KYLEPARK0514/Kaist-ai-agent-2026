@@ -32,7 +32,6 @@ module functions 'modules/functions.bicep' = {
     location: location
     uniqueSuffix: uniqueSuffix
     appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
-    pdfStorageConnectionString: storage.outputs.connectionString
     cosmosEndpoint: cosmos.outputs.cosmosEndpoint
     cosmosDatabaseName: cosmos.outputs.cosmosDatabaseName
     cosmosContainerName: cosmos.outputs.cosmosContainerName
