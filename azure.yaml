@@ -1,0 +1,18 @@
+# Azure Developer CLI configuration
+name: kaist-ai-agent-2026
+
+services:
+  api:
+    project: ./kaist-ai-functions
+    language: py
+    host: function
+
+  web:
+    project: ./kaist-ai-webapp
+    language: ts
+    host: staticwebapp
+
+infra:
+  provider: bicep
+  path: kaist-ai-infra
+  module: main
