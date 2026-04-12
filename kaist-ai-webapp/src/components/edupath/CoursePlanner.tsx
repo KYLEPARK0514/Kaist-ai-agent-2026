@@ -9,7 +9,6 @@ import {
   ChevronUp,
   AlertTriangle,
   CheckCircle2,
-  BookOpen,
   RotateCcw,
   Download,
 } from "lucide-react";

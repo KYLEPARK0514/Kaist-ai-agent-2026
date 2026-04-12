@@ -3,7 +3,6 @@ import { useAgentData } from "../../context/AgentDataContext";
 import {
   Sparkles,
   CheckCircle2,
-  ChevronRight,
   TrendingUp,
   Code2,
   BarChart3,
