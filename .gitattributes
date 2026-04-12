@@ -1,0 +1,2 @@
+# Azure Linux startup must use LF line endings.
+startup.sh text eol=lf

@@ -1,0 +1,80 @@
+# Deploy EduPath API + built SPA to Azure App Service on every push to main/master.
+#
+# One-time GitHub setup (repository → Settings → Secrets and variables → Actions):
+#   1. Add secret AZURE_WEBAPP_PUBLISH_PROFILE
+#      - Azure Portal → your App Service → Download publish profile → paste entire .PublishSettings XML
+#
+# One-time Azure setup (App Service → Configuration → General settings):
+#   Startup Command:  bash /home/site/wwwroot/startup.sh
+#
+# Optional: set repository variable AZURE_WEBAPP_NAME to override the app name below.
+
+name: Deploy to Azure App Service
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: azure-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      # Default app name; override with repo variable AZURE_WEBAPP_NAME if you rename the app.
+      AZURE_WEBAPP_NAME: kaist-ai-agent-2026-28819
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Require Azure publish profile secret
+        shell: bash
+        env:
+          PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        run: |
+          if [ -z "$PROFILE" ]; then
+            echo "::error::Add GitHub Actions secret AZURE_WEBAPP_PUBLISH_PROFILE (Azure Portal → App Service → Get publish profile → paste full file contents)."
+            exit 1
+          fi
+
+      - name: Resolve web app name
+        id: app
+        run: |
+          NAME="${{ vars.AZURE_WEBAPP_NAME }}"
+          if [ -z "$NAME" ]; then NAME="${{ env.AZURE_WEBAPP_NAME }}"; fi
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: kaist-ai-webapp/package-lock.json
+
+      - name: Build webapp
+        working-directory: kaist-ai-webapp
+        run: npm ci && npm run build
+
+      - name: Assemble deployment package
+        run: |
+          mkdir -p deploy/kaist-ai-functions deploy/kaist-ai-webapp
+          cp kaist-ai-functions/requirements.txt deploy/requirements.txt
+          cp kaist-ai-functions/*.py deploy/kaist-ai-functions/
+          cp -r kaist-ai-webapp/build deploy/kaist-ai-webapp/
+          cp startup.sh deploy/
+          chmod +x deploy/startup.sh
+          test -f deploy/kaist-ai-webapp/build/index.html
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ steps.app.outputs.name }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: deploy
