@@ -14,7 +14,7 @@ from syllabus_text import build_syllabus_record_from_text, chunk_text, extract_p
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WEB_DIST = ROOT / "kaist-ai-webapp" / "build"
+WEB_DIST = ROOT / "kaist-ai-webapp" / "dist"
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "change-me")
 STORE = SyllabusStore()
 
