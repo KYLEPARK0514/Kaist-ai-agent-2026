@@ -1,6 +1,7 @@
 ﻿import { Component, type ReactNode } from "react";
 import { Layout } from "./components/Layout";
 import { AgentDataProvider } from "./context/AgentDataContext";
+import { SyllabusProvider } from "./context/SyllabusContext";
 import { UserSessionProvider } from "./context/UserSessionContext";
 import { pageFromHashOnly } from "./lib/appRoutes";
 
@@ -43,7 +44,9 @@ export default function App() {
     <AppErrorBoundary>
       <UserSessionProvider>
         <AgentDataProvider>
-          <Layout initialPage={initialPage} />
+          <SyllabusProvider>
+            <Layout initialPage={initialPage} />
+          </SyllabusProvider>
         </AgentDataProvider>
       </UserSessionProvider>
     </AppErrorBoundary>
