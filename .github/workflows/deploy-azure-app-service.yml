@@ -67,6 +67,8 @@ jobs:
           mkdir -p deploy/kaist-ai-functions deploy/kaist-ai-webapp
           cp kaist-ai-functions/requirements.txt deploy/requirements.txt
           cp kaist-ai-functions/*.py deploy/kaist-ai-functions/
+          cp -r kaist-ai-functions/services deploy/kaist-ai-functions/
+          cp -r kaist-ai-functions/models deploy/kaist-ai-functions/
           cp -r kaist-ai-webapp/dist deploy/kaist-ai-webapp/
           cp startup.sh deploy/
           chmod +x deploy/startup.sh
