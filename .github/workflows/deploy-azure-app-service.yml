@@ -67,10 +67,14 @@ jobs:
           mkdir -p deploy/kaist-ai-functions deploy/kaist-ai-webapp
           cp kaist-ai-functions/requirements.txt deploy/requirements.txt
           cp kaist-ai-functions/*.py deploy/kaist-ai-functions/
-          cp -r kaist-ai-webapp/build deploy/kaist-ai-webapp/
+          cp -r kaist-ai-webapp/dist deploy/kaist-ai-webapp/
           cp startup.sh deploy/
           chmod +x deploy/startup.sh
-          test -f deploy/kaist-ai-webapp/build/index.html
+          if ! test -f deploy/kaist-ai-webapp/dist/index.html; then
+            echo "::error::deploy/kaist-ai-webapp/dist/index.html not found. Webapp build output:"
+            ls -la kaist-ai-webapp/ || true
+            exit 1
+          fi
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
