@@ -78,3 +78,18 @@ def get_blob_url(blob_name: str) -> str:
     container_client = client.get_container_client(_container_name())
     blob_client = container_client.get_blob_client(blob_name)
     return blob_client.url
+
+
+def download_blob(blob_name: str) -> bytes:
+    """Download a blob as bytes.
+
+    Args:
+        blob_name: The object name.
+
+    Returns:
+        Raw bytes of the blob content.
+    """
+    client = _get_client()
+    container_client = client.get_container_client(_container_name())
+    blob_client = container_client.get_blob_client(blob_name)
+    return blob_client.download_blob().readall()

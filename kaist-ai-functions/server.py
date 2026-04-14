@@ -17,7 +17,7 @@ from flask import Flask, jsonify, make_response, request, send_from_directory
 
 # ── Legacy EduPath modules (same directory) ──────────────────────────────
 from edupath_agent import run_agent
-from syllabus_rag import retrieve_best_chunks, synthesize_answer
+from syllabus_rag import retrieve_best_chunks, synthesize_answer, try_answer_from_structured_syllabi
 from syllabus_store import SyllabusStore
 from syllabus_text import (
     build_syllabus_record_from_text,
@@ -148,6 +148,10 @@ def syllabus_rag():
         return jsonify({"error": "question이 필요합니다."}), 400
     syllabus_id = payload.get("syllabusId") or payload.get("syllabus_id")
     syllabus_id_str = str(syllabus_id).strip() if syllabus_id else None
+    syllabi = STORE.list_all(include_full_text=False)
+    structured_answer = try_answer_from_structured_syllabi(question, syllabi, syllabus_id=syllabus_id_str)
+    if structured_answer:
+        return jsonify({"answer": structured_answer, "citations": []})
     raw_chunks = STORE.list_all_chunks()
     hits = retrieve_best_chunks(raw_chunks, question, top_k=8, syllabus_id=syllabus_id_str)
     answer = synthesize_answer(question, hits)

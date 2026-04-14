@@ -79,6 +79,12 @@ def create_chunk_item(item: dict[str, Any]) -> dict[str, Any]:
     return container.upsert_item(item)
 
 
+def upsert_item(item: dict[str, Any]) -> dict[str, Any]:
+    """Upsert any item type and return stored document."""
+    container = _get_container()
+    return container.upsert_item(item)
+
+
 # ---------------------------------------------------------------------------
 # Read operations
 # ---------------------------------------------------------------------------

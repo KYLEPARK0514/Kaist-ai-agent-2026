@@ -60,26 +60,42 @@ export function AdminSyllabusPage() {
   };
 
   const handlePdfUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files ?? []);
     event.target.value = "";
-    if (!file) return;
-    try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(file);
-      });
-      const b64 = dataUrl.split(",")[1] || "";
-      if (!b64) {
-        setResultMessage("PDF Base64 변환에 실패했습니다.");
-        return;
+    if (files.length === 0) return;
+
+    let success = 0;
+    const failed: string[] = [];
+    let totalChunks = 0;
+
+    for (const file of files) {
+      try {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        });
+        const b64 = dataUrl.split(",")[1] || "";
+        if (!b64) {
+          failed.push(file.name);
+          continue;
+        }
+        const { chunks } = await ingestPdfBase64(file.name, b64);
+        success += 1;
+        totalChunks += chunks;
+      } catch {
+        failed.push(file.name);
       }
-      const { chunks } = await ingestPdfBase64(file.name, b64);
-      setResultMessage(`PDF 업로드 완료: ${file.name} (청크 ${chunks}개 색인)`);
-    } catch (e) {
-      setResultMessage(e instanceof Error ? e.message : "PDF 업로드 중 오류가 발생했습니다.");
     }
+
+    if (failed.length > 0) {
+      setResultMessage(
+        `PDF 업로드 완료: 성공 ${success}개(총 ${totalChunks}청크), 실패 ${failed.length}개 (${failed.join(", ")})`
+      );
+      return;
+    }
+    setResultMessage(`PDF 업로드 완료: ${success}개 파일 (총 ${totalChunks}청크 색인)`);
   };
 
   const handleDelete = async (id: string) => {
@@ -145,7 +161,13 @@ export function AdminSyllabusPage() {
           <label className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm cursor-pointer hover:bg-indigo-700">
             <Upload className="w-4 h-4" />
             PDF 업로드
-            <input type="file" accept="application/pdf" onChange={(e) => void handlePdfUpload(e)} className="hidden" />
+            <input
+              type="file"
+              multiple
+              accept="application/pdf"
+              onChange={(e) => void handlePdfUpload(e)}
+              className="hidden"
+            />
           </label>
           <label className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-border bg-card text-sm cursor-pointer hover:bg-muted/50">
             <Upload className="w-4 h-4" />

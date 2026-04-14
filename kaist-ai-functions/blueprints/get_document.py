@@ -60,6 +60,10 @@ def get_document(req: func.HttpRequest) -> func.HttpResponse:
         blobName=item["blobName"],
         chunkCount=item["chunkCount"],
         uploadedAt=item["uploadedAt"],
+        status=item.get("status", "processed"),
+        labels=item.get("labels", []),
+        hashtags=item.get("hashtags", []),
+        categories=item.get("categories", []),
     )
     return func.HttpResponse(
         response.model_dump_json(),

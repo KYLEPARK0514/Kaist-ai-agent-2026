@@ -16,6 +16,10 @@ class DocumentMetadataResponse(BaseModel):
     blobName: str = Field(..., description="Blob storage object name")
     chunkCount: int = Field(..., description="Number of text chunks stored")
     uploadedAt: str = Field(..., description="ISO 8601 upload timestamp")
+    status: str = Field(default="queued", description="Processing status")
+    labels: list[str] = Field(default_factory=list, description="Document labels")
+    hashtags: list[str] = Field(default_factory=list, description="Document hashtags")
+    categories: list[str] = Field(default_factory=list, description="Document categories")
 
     model_config = {"populate_by_name": True}
 
@@ -36,6 +40,29 @@ class UploadDocumentResponse(BaseModel):
     filename: str = Field(..., description="Original uploaded filename")
     chunkCount: int = Field(..., description="Number of text chunks generated and embedded")
     uploadedAt: str = Field(..., description="ISO 8601 upload timestamp")
+    status: str = Field(default="queued", description="Initial processing status")
+
+
+class ExtractedDocumentInfo(BaseModel):
+    """Structured information extracted from a PDF by LLM."""
+
+    title: str = Field(default="", description="Inferred document title")
+    summary: str = Field(default="", description="Short summary of the document")
+    key_points: list[str] = Field(
+        default_factory=list, description="Core points extracted from document"
+    )
+    labels: list[str] = Field(default_factory=list, description="General labels")
+    hashtags: list[str] = Field(default_factory=list, description="Hashtag style tags")
+    categories: list[str] = Field(default_factory=list, description="Classification values")
+
+
+class QueueProcessPdfMessage(BaseModel):
+    """Queue payload for asynchronous PDF processing pipeline."""
+
+    documentId: str
+    blobName: str
+    filename: str
+    uploadedAt: str
 
 
 class UpdateDocumentRequest(BaseModel):

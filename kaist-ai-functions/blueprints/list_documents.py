@@ -41,6 +41,10 @@ def list_documents(req: func.HttpRequest) -> func.HttpResponse:
             blobName=item["blobName"],
             chunkCount=item["chunkCount"],
             uploadedAt=item["uploadedAt"],
+            status=item.get("status", "processed"),
+            labels=item.get("labels", []),
+            hashtags=item.get("hashtags", []),
+            categories=item.get("categories", []),
         )
         for item in raw_items
     ]

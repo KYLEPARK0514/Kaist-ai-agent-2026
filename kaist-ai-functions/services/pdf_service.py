@@ -13,6 +13,7 @@ from typing import Optional
 from google import genai
 from google.genai import types as genai_types
 from pypdf import PdfReader
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -150,3 +151,35 @@ def embed_texts(
         List of 768-dim float vectors, one per input text.
     """
     return [embed_text(t, task_type) for t in texts]
+
+
+def extract_structured_info(text: str, schema: type[BaseModel]) -> BaseModel:
+    """Extract structured fields from document text using Gemini response_schema.
+
+    Args:
+        text: Source text from PDF.
+        schema: Pydantic BaseModel class for response_schema.
+
+    Returns:
+        Parsed schema instance.
+    """
+    client = _get_client()
+    prompt = (
+        "You extract structured information from a PDF text. "
+        "Fill every field in the provided schema as accurately as possible. "
+        "Keep values concise, deduplicate tags, and return only schema data."
+    )
+    result = client.models.generate_content(
+        model=os.environ.get("GEMINI_STRUCTURED_MODEL", "gemini-2.0-flash"),
+        contents=[prompt, text[:20000]],
+        config=genai_types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=schema,
+            temperature=0.2,
+        ),
+    )
+    if result.parsed:
+        return result.parsed
+
+    # Fallback for SDK versions returning raw JSON text only.
+    return schema.model_validate_json(result.text or "{}")

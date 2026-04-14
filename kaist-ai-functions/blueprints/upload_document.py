@@ -1,4 +1,4 @@
-"""POST /api/documents — Upload a PDF, extract text, embed chunks, and persist."""
+"""POST /api/documents — Upload a PDF and enqueue async processing."""
 from __future__ import annotations
 
 import json
@@ -7,10 +7,9 @@ import uuid
 from datetime import datetime, timezone
 
 import azure.functions as func
-from pypdf.errors import PdfStreamError
 
-from models.document import UploadDocumentResponse
-from services import blob_service, cosmos_service, pdf_service
+from models.document import QueueProcessPdfMessage, UploadDocumentResponse
+from services import blob_service, cosmos_service, queue_service
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +18,7 @@ bp = func.Blueprint()
 
 @bp.route(route="documents", methods=["POST"])
 def upload_document(req: func.HttpRequest) -> func.HttpResponse:
-    """Upload a PDF file, extract text content, generate embeddings, and store.
+    """Upload a PDF file and enqueue background extraction/indexing.
 
     Multipart form-data fields
     --------------------------
@@ -86,20 +85,7 @@ def upload_document(req: func.HttpRequest) -> func.HttpResponse:
         logger.info("Uploaded blob: %s", blob_name)
 
         # --------------------------------------------------------------
-        # 4. Extract text & chunk
-        # --------------------------------------------------------------
-        raw_text = pdf_service.extract_text(file_data)
-        chunks = pdf_service.chunk_text(raw_text)
-        logger.info("Extracted %d chunks from %s", len(chunks), original_filename)
-
-        # --------------------------------------------------------------
-        # 5. Generate embeddings
-        # --------------------------------------------------------------
-        embeddings = pdf_service.embed_texts(chunks)
-        logger.info("Generated %d embeddings", len(embeddings))
-
-        # --------------------------------------------------------------
-        # 6. Persist metadata item
+        # 4. Persist metadata item (queued)
         # --------------------------------------------------------------
         metadata_item: dict = {
             "id": document_id,
@@ -107,39 +93,27 @@ def upload_document(req: func.HttpRequest) -> func.HttpResponse:
             "type": "metadata",
             "filename": original_filename,
             "blobName": blob_name,
-            "chunkCount": len(chunks),
+            "chunkCount": 0,
             "uploadedAt": uploaded_at,
+            "status": "queued",
+            "labels": [],
+            "hashtags": [],
+            "categories": [],
         }
-        cosmos_service.create_metadata_item(metadata_item)
+        cosmos_service.upsert_item(metadata_item)
 
         # --------------------------------------------------------------
-        # 7. Persist chunk items
+        # 5. Enqueue async processing message
         # --------------------------------------------------------------
-        for idx, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
-            chunk_item: dict = {
-                "id": str(uuid.uuid4()),
-                "documentId": document_id,
-                "type": "chunk",
-                "content": chunk_text,
-                "chunkIndex": idx,
-                "embedding": embedding,
-            }
-            cosmos_service.create_chunk_item(chunk_item)
-
-        logger.info("Persisted metadata + %d chunks for document %s", len(chunks), document_id)
-
-    except (ValueError, PdfStreamError) as exc:
-        logger.warning("PDF processing error: %s", exc)
-        # Clean up blob if already uploaded
-        try:
-            blob_service.delete_blob(blob_name)
-        except Exception:
-            pass
-        return func.HttpResponse(
-            json.dumps({"error": f"Could not process PDF: {exc}"}),
-            status_code=400,
-            mimetype="application/json",
+        queue_message = QueueProcessPdfMessage(
+            documentId=document_id,
+            blobName=blob_name,
+            filename=original_filename,
+            uploadedAt=uploaded_at,
         )
+        queue_service.enqueue_pdf_processing_message(queue_message.model_dump())
+        logger.info("Queued document %s for async processing", document_id)
+
     except Exception as exc:
         logger.exception("Unexpected error during document upload: %s", exc)
         # Best-effort cleanup
@@ -154,13 +128,14 @@ def upload_document(req: func.HttpRequest) -> func.HttpResponse:
         )
 
     # ------------------------------------------------------------------
-    # 8. Return 201 Created
+    # 6. Return 201 Created
     # ------------------------------------------------------------------
     response = UploadDocumentResponse(
         documentId=document_id,
         filename=original_filename,
-        chunkCount=len(chunks),
+        chunkCount=0,
         uploadedAt=uploaded_at,
+        status="queued",
     )
     return func.HttpResponse(
         response.model_dump_json(),

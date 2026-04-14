@@ -16,6 +16,7 @@ DELETE /api/conversations/{id}               Delete conversation + all messages
 """
 import json
 import logging
+from datetime import datetime, timezone
 
 import azure.functions as func
 
@@ -29,6 +30,8 @@ from blueprints.create_conversation import bp as create_conversation_bp
 from blueprints.get_conversation import bp as get_conversation_bp
 from blueprints.send_message import bp as send_message_bp
 from blueprints.delete_conversation import bp as delete_conversation_bp
+from models.document import ExtractedDocumentInfo, QueueProcessPdfMessage
+from services import blob_service, cosmos_service, pdf_service
 
 logger = logging.getLogger(__name__)
 
@@ -77,3 +80,62 @@ def chat(req: func.HttpRequest) -> func.HttpResponse:
         status_code=501,
         mimetype="application/json",
     )
+
+
+@app.queue_trigger(
+    arg_name="msg",
+    queue_name="pdf-processing",
+    connection="AZURE_STORAGE_CONNECTION_STRING",
+)
+def process_pdf_queue_message(msg: func.QueueMessage) -> None:
+    """Queue Trigger: PDF 분석 → 구조화 추출 → CosmosDB 적재."""
+    raw_payload = msg.get_body().decode("utf-8")
+    queue_payload = QueueProcessPdfMessage.model_validate_json(raw_payload)
+    document_id = queue_payload.documentId
+    logger.info("Queue processing started for %s", document_id)
+
+    metadata = cosmos_service.get_document(document_id)
+    if not metadata:
+        logger.warning("Metadata not found for queued document: %s", document_id)
+        return
+
+    try:
+        metadata["status"] = "processing"
+        metadata["updatedAt"] = datetime.now(timezone.utc).isoformat()
+        cosmos_service.upsert_item(metadata)
+
+        pdf_bytes = blob_service.download_blob(queue_payload.blobName)
+        raw_text = pdf_service.extract_text(pdf_bytes)
+        chunks = pdf_service.chunk_text(raw_text)
+        embeddings = pdf_service.embed_texts(chunks)
+        extracted = pdf_service.extract_structured_info(raw_text, ExtractedDocumentInfo)
+
+        for idx, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
+            chunk_item = {
+                "id": f"{document_id}_chunk_{idx}",
+                "documentId": document_id,
+                "type": "chunk",
+                "content": chunk_text,
+                "chunkIndex": idx,
+                "embedding": embedding,
+            }
+            cosmos_service.upsert_item(chunk_item)
+
+        metadata["chunkCount"] = len(chunks)
+        metadata["status"] = "processed"
+        metadata["title"] = extracted.title
+        metadata["summary"] = extracted.summary
+        metadata["keyPoints"] = extracted.key_points
+        metadata["labels"] = extracted.labels
+        metadata["hashtags"] = extracted.hashtags
+        metadata["categories"] = extracted.categories
+        metadata["updatedAt"] = datetime.now(timezone.utc).isoformat()
+        cosmos_service.upsert_item(metadata)
+        logger.info("Queue processing finished for %s with %d chunks", document_id, len(chunks))
+    except Exception as exc:
+        logger.exception("Queue processing failed for %s: %s", document_id, exc)
+        metadata["status"] = "failed"
+        metadata["errorMessage"] = str(exc)
+        metadata["updatedAt"] = datetime.now(timezone.utc).isoformat()
+        cosmos_service.upsert_item(metadata)
+        raise
