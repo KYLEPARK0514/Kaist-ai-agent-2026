@@ -18,6 +18,7 @@ import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer } fro
 import { useSyllabusData, type UploadedSyllabus } from "../../context/SyllabusContext";
 
 type Course = UploadedSyllabus;
+const gradeOptions = ["", "A+", "A0", "A-", "B+", "B0", "B-", "C+", "C0", "C-", "D", "F", "P", "NP"] as const;
 
 function DifficultyDots({ value, max = 5 }: { value: number; max?: number }) {
   return (
@@ -33,7 +34,7 @@ function DifficultyDots({ value, max = 5 }: { value: number; max?: number }) {
 }
 
 export function SyllabusAnalysis() {
-  const { syllabi, loading, error } = useSyllabusData();
+  const { syllabi, loading, error, progressByCourseId, updateCourseProgress } = useSyllabusData();
   const courses = useMemo(() => syllabi, [syllabi]);
   const usingUploadedSyllabi = syllabi.length > 0;
 
@@ -113,6 +114,20 @@ export function SyllabusAnalysis() {
     { subject: "워크로드", value: c.workload * 20 },
   ];
 
+  const progressSummary = useMemo(() => {
+    const totalCourses = courses.length;
+    const completedCourses = courses.filter((c) => progressByCourseId[c.id]?.completed).length;
+    const totalCredits = courses.reduce((acc, c) => acc + (Number.isFinite(c.credits) ? c.credits : 0), 0);
+    const completedCredits = courses.reduce(
+      (acc, c) => (progressByCourseId[c.id]?.completed ? acc + (Number.isFinite(c.credits) ? c.credits : 0) : acc),
+      0
+    );
+    const coursePct = totalCourses > 0 ? Math.round((completedCourses / totalCourses) * 100) : 0;
+    const creditPct = totalCredits > 0 ? Math.round((completedCredits / totalCredits) * 100) : 0;
+
+    return { totalCourses, completedCourses, totalCredits, completedCredits, coursePct, creditPct };
+  }, [courses, progressByCourseId]);
+
   return (
     <div className="p-6 space-y-5 max-w-6xl mx-auto">
       {/* Header */}
@@ -152,6 +167,41 @@ export function SyllabusAnalysis() {
             관리자 메뉴에서 PDF/JSON 실러버스를 업로드하면 목록·RAG·수강풀이 연동이 활성화됩니다.
           </span>
         )}
+      </div>
+
+      <div className="rounded-xl border border-border bg-card/60 p-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <div className="text-sm font-medium text-foreground">내 수강 진행률</div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              과목별 수강 여부/성적을 체크하면 이수율이 자동 계산됩니다.
+            </p>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            과목 {progressSummary.completedCourses}/{progressSummary.totalCourses} · 학점 {progressSummary.completedCredits}/
+            {progressSummary.totalCredits}
+          </div>
+        </div>
+        <div className="grid md:grid-cols-2 gap-3 mt-3">
+          <div>
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="text-muted-foreground">과목 기준</span>
+              <span className="font-medium text-indigo-700">{progressSummary.coursePct}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-muted">
+              <div className="h-2 rounded-full bg-indigo-500" style={{ width: `${progressSummary.coursePct}%` }} />
+            </div>
+          </div>
+          <div>
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="text-muted-foreground">학점 기준</span>
+              <span className="font-medium text-violet-700">{progressSummary.creditPct}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-muted">
+              <div className="h-2 rounded-full bg-violet-500" style={{ width: `${progressSummary.creditPct}%` }} />
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="rounded-xl border border-border bg-card/60 p-4 space-y-3">
@@ -257,6 +307,7 @@ export function SyllabusAnalysis() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((course) => {
             const isComparing = compareList.includes(course.id);
+            const progress = progressByCourseId[course.id] || { completed: false, grade: "" };
             return (
               <div
                 key={course.id}
@@ -298,6 +349,32 @@ export function SyllabusAnalysis() {
                       <span className="text-muted-foreground">워크로드</span>
                       <DifficultyDots value={course.workload} />
                     </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <label
+                      className="flex items-center gap-2 text-xs text-muted-foreground"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={progress.completed}
+                        onChange={(e) => updateCourseProgress(course.id, { completed: e.target.checked })}
+                      />
+                      수강 완료
+                    </label>
+                    <select
+                      value={progress.grade}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => updateCourseProgress(course.id, { grade: e.target.value as typeof progress.grade })}
+                      className="h-7 rounded-md border border-border bg-background px-2 text-xs"
+                    >
+                      {gradeOptions.map((grade) => (
+                        <option key={grade || "none"} value={grade}>
+                          {grade || "성적 미입력"}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
@@ -450,6 +527,33 @@ export function SyllabusAnalysis() {
             <div className="space-y-4">
               {/* Stats */}
               <div className="space-y-3">
+                <div className="p-2 rounded-lg bg-muted/30">
+                  <div className="text-xs text-muted-foreground mb-2">내 수강 상태</div>
+                  <div className="flex items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(progressByCourseId[selectedCourse.id]?.completed)}
+                        onChange={(e) => updateCourseProgress(selectedCourse.id, { completed: e.target.checked })}
+                      />
+                      수강 완료
+                    </label>
+                    <select
+                      value={progressByCourseId[selectedCourse.id]?.grade || ""}
+                      onChange={(e) =>
+                        updateCourseProgress(selectedCourse.id, { grade: e.target.value as (typeof gradeOptions)[number] })
+                      }
+                      className="h-7 rounded-md border border-border bg-background px-2 text-xs"
+                    >
+                      {gradeOptions.map((grade) => (
+                        <option key={grade || "none"} value={grade}>
+                          {grade || "성적 미입력"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
                 {[
                   { icon: BarChart3, label: "난이도", value: <DifficultyDots value={selectedCourse.difficulty} /> },
                   { icon: Clock, label: "워크로드", value: <DifficultyDots value={selectedCourse.workload} /> },

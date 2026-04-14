@@ -1,6 +1,27 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 const ADMIN_TOKEN_KEY = "edupath_admin_token_v1";
+const STUDENT_PROGRESS_KEY = "edupath_student_progress_v1";
+
+export type CourseGrade =
+  | "A+"
+  | "A0"
+  | "A-"
+  | "B+"
+  | "B0"
+  | "B-"
+  | "C+"
+  | "C0"
+  | "C-"
+  | "D"
+  | "F"
+  | "P"
+  | "NP";
+
+export interface StudentCourseProgress {
+  completed: boolean;
+  grade: CourseGrade | "";
+}
 
 export interface UploadedSyllabus {
   id: string;
@@ -28,6 +49,7 @@ export interface UploadedSyllabus {
 
 interface SyllabusContextValue {
   syllabi: UploadedSyllabus[];
+  progressByCourseId: Record<string, StudentCourseProgress>;
   loading: boolean;
   error: string | null;
   adminToken: string;
@@ -37,6 +59,7 @@ interface SyllabusContextValue {
   ingestPdfBase64: (fileName: string, pdfBase64: string) => Promise<{ chunks: number }>;
   removeSyllabus: (id: string) => Promise<boolean>;
   clearAll: () => Promise<boolean>;
+  updateCourseProgress: (courseId: string, patch: Partial<StudentCourseProgress>) => void;
 }
 
 const SyllabusContext = createContext<SyllabusContextValue | null>(null);
@@ -142,6 +165,17 @@ async function parseFile(file: File): Promise<UploadedSyllabus[]> {
 
 export function SyllabusProvider({ children }: { children: ReactNode }) {
   const [syllabi, setSyllabi] = useState<UploadedSyllabus[]>([]);
+  const [progressByCourseId, setProgressByCourseId] = useState<Record<string, StudentCourseProgress>>(() => {
+    try {
+      const raw = localStorage.getItem(STUDENT_PROGRESS_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw) as unknown;
+      if (!parsed || typeof parsed !== "object") return {};
+      return parsed as Record<string, StudentCourseProgress>;
+    } catch {
+      return {};
+    }
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [adminToken, setAdminTokenState] = useState<string>(() => localStorage.getItem(ADMIN_TOKEN_KEY) || "");
@@ -175,6 +209,10 @@ export function SyllabusProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    localStorage.setItem(STUDENT_PROGRESS_KEY, JSON.stringify(progressByCourseId));
+  }, [progressByCourseId]);
 
   const ingestPdfBase64 = useCallback(
     async (fileName: string, pdfBase64: string) => {
@@ -258,9 +296,20 @@ export function SyllabusProvider({ children }: { children: ReactNode }) {
     return true;
   }, [adminToken, refresh]);
 
+  const updateCourseProgress = useCallback((courseId: string, patch: Partial<StudentCourseProgress>) => {
+    setProgressByCourseId((prev) => {
+      const current = prev[courseId] || { completed: false, grade: "" };
+      return {
+        ...prev,
+        [courseId]: { ...current, ...patch },
+      };
+    });
+  }, []);
+
   const value = useMemo(
     () => ({
       syllabi,
+      progressByCourseId,
       loading,
       error,
       adminToken,
@@ -270,8 +319,22 @@ export function SyllabusProvider({ children }: { children: ReactNode }) {
       ingestPdfBase64,
       removeSyllabus,
       clearAll,
+      updateCourseProgress,
     }),
-    [syllabi, loading, error, adminToken, setAdminToken, refresh, addFiles, ingestPdfBase64, removeSyllabus, clearAll]
+    [
+      syllabi,
+      progressByCourseId,
+      loading,
+      error,
+      adminToken,
+      setAdminToken,
+      refresh,
+      addFiles,
+      ingestPdfBase64,
+      removeSyllabus,
+      clearAll,
+      updateCourseProgress,
+    ]
   );
 
   return <SyllabusContext.Provider value={value}>{children}</SyllabusContext.Provider>;
